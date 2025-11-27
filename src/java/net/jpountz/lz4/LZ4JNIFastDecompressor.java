@@ -34,8 +34,14 @@ final class LZ4JNIFastDecompressor extends LZ4FastDecompressor {
 
   @Override
   public final int decompress(byte[] src, int srcOff, byte[] dest, int destOff, int destLen) {
-    SafeUtils.checkRange(src, srcOff);
+    int srcLen = src.length - srcOff;
+    SafeUtils.checkRange(src, srcOff, srcLen);
     SafeUtils.checkRange(dest, destOff, destLen);
+
+    if (srcLen == 0) {
+      throw new LZ4Exception("Empty src");
+    }
+
     final int result = LZ4JNI.LZ4_decompress_fast(src, null, srcOff, dest, null, destOff, destLen);
     if (result < 0) {
       throw new LZ4Exception("Error decoding offset " + (srcOff - result) + " of input buffer");
@@ -46,8 +52,13 @@ final class LZ4JNIFastDecompressor extends LZ4FastDecompressor {
   @Override
   public int decompress(ByteBuffer src, int srcOff, ByteBuffer dest, int destOff, int destLen) {
     ByteBufferUtils.checkNotReadOnly(dest);
-    ByteBufferUtils.checkRange(src, srcOff);
+    int srcLen = src.capacity() - srcOff;
+    ByteBufferUtils.checkRange(src, srcOff, srcLen);
     ByteBufferUtils.checkRange(dest, destOff, destLen);
+
+    if (srcLen == 0) {
+      throw new LZ4Exception("Empty src");
+    }
 
     if ((src.hasArray() || src.isDirect()) && (dest.hasArray() || dest.isDirect())) {
       byte[] srcArr = null, destArr = null;
