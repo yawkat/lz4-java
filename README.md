@@ -1,6 +1,6 @@
 # LZ4 Java
 
-*Community-maintained fork of https://github.com/lz4/lz4-java to patch CVE‐2025‐12183. Maven coordinates:*
+*Community-maintained fork of https://github.com/lz4/lz4-java to patch [CVE‐2025‐12183](https://sites.google.com/sonatype.com/vulnerabilities/cve-2025-12183). Maven coordinates:*
 
 ```xml
 <dependency>
@@ -141,15 +141,16 @@ int hash = hash32.getValue();
 
 # Download
 
-You can download released artifacts from [Maven Central](https://search.maven.org/search?q=g:org.lz4%20a:lz4-java).
+You can download released artifacts from [Maven Central](https://central.sonatype.com/artifact/at.yawk.lz4/lz4-java).
 
-You can download pure-Java lz4-java from [Maven Central](https://search.maven.org/search?q=g:org.lz4%20a:lz4-pure-java). These artifacts include the Safe and Unsafe Java versions but not JNI bindings. (Experimental)
+You can download pure-Java lz4-java from [Maven Central](https://search.maven.org/search?q=g:org.lz4%20a:lz4-pure-java). These artifacts include the Safe and Unsafe Java versions but not JNI bindings. (Experimental; no version with a fix for [CVE‐2025‐12183](https://sites.google.com/sonatype.com/vulnerabilities/cve-2025-12183) available yet)
 
 # Documentation
 
- - [lz4](https://lz4.github.io/lz4-java/1.8.0/docs/net/jpountz/lz4/package-summary.html)
- - [xxhash](https://lz4.github.io/lz4-java/1.8.0/docs/net/jpountz/xxhash/package-summary.html)
- - [changelog](https://github.com/lz4/lz4-java/blob/master/CHANGES.md)
+ - [lz4](https://javadoc.io/doc/at.yawk.lz4/lz4-java/latest/org.lz4.java/net/jpountz/lz4/package-summary.html)
+ - [xxhash](https://javadoc.io/doc/at.yawk.lz4/lz4-java/latest/org.lz4.java/net/jpountz/xxhash/package-summary.html)
+ - [changelog (versions <= 1.8.0)](https://github.com/yawkat/lz4-java/blob/main/CHANGES.md)
+ - [changelog / GitHub releases (versions >= 1.8.1)](https://github.com/yawkat/lz4-java/releases)
 
 # Performance
 

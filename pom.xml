@@ -26,7 +26,7 @@
 
   <name>LZ4 Java Compression</name>
   <description>Java bindings and pure Java implementations of LZ4 and XXHash</description>
-  <url>https://github.com/lz4/lz4-java</url>
+  <url>https://github.com/yawkat/lz4-java</url>
   <licenses>
     <license>
       <name>Apache License, Version 2.0</name>
