@@ -29,6 +29,7 @@ import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import net.jpountz.xxhash.XXHashFactory;
 
 import org.junit.Test;
@@ -37,6 +38,20 @@ import static org.junit.Assert.*;
 import com.carrotsearch.randomizedtesting.annotations.Repeat;
 
 public class LZ4BlockStreamingTest extends AbstractLZ4Test {
+
+  private final LZ4BlockInputStream.Builder preInitializedBuilder;
+
+  public LZ4BlockStreamingTest(LZ4BlockInputStream.Builder preInitializedBuilder) {
+    this.preInitializedBuilder = preInitializedBuilder;
+  }
+
+  @ParametersFactory
+  public static Iterable<Object[]> preInitializedBuilders() {
+    return Arrays.asList(new Object[][] {
+      { LZ4BlockInputStream.newBuilder().withDecompressor(LZ4Factory.fastestInstance().fastDecompressor()) },
+      { LZ4BlockInputStream.newBuilder().withDecompressor(LZ4Factory.fastestInstance().safeDecompressor()) }
+    });
+  }
 
   // An input stream that might read less data than it is able to
   class MockInputStream extends FilterInputStream {
@@ -158,55 +173,57 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     final ByteArrayOutputStream compressed = new ByteArrayOutputStream();
     final int blockSize;
     switch (randomInt(2)) {
-    case 0:
-      blockSize = LZ4BlockOutputStream.MIN_BLOCK_SIZE;
-      break;
-    case 1:
-      blockSize = LZ4BlockOutputStream.MAX_BLOCK_SIZE;
-      break;
-    default:
-      blockSize = randomIntBetween(LZ4BlockOutputStream.MIN_BLOCK_SIZE, LZ4BlockOutputStream.MAX_BLOCK_SIZE);
-      break;
+      case 0:
+        blockSize = LZ4BlockOutputStream.MIN_BLOCK_SIZE;
+        break;
+      case 1:
+        blockSize = LZ4BlockOutputStream.MAX_BLOCK_SIZE;
+        break;
+      default:
+        blockSize = randomIntBetween(LZ4BlockOutputStream.MIN_BLOCK_SIZE, LZ4BlockOutputStream.MAX_BLOCK_SIZE);
+        break;
     }
     final LZ4Compressor compressor = randomBoolean()
-        ? LZ4Factory.fastestInstance().fastCompressor()
-        : LZ4Factory.fastestInstance().highCompressor();
+      ? LZ4Factory.fastestInstance().fastCompressor()
+      : LZ4Factory.fastestInstance().highCompressor();
     final Checksum checksum;
     switch (randomInt(2)) {
-    case 0:
-      checksum = new Adler32();
-      break;
-    case 1:
-      checksum = new CRC32();
-      break;
-    default:
-      checksum = XXHashFactory.fastestInstance().newStreamingHash32(randomInt()).asChecksum();
-      break;
+      case 0:
+        checksum = new Adler32();
+        break;
+      case 1:
+        checksum = new CRC32();
+        break;
+      default:
+        checksum = XXHashFactory.fastestInstance().newStreamingHash32(randomInt()).asChecksum();
+        break;
     }
     final boolean syncFlush = randomBoolean();
     final LZ4BlockOutputStream os = new LZ4BlockOutputStream(wrap(compressed), blockSize, compressor, checksum, syncFlush);
     final int half = data.length / 2;
     switch (randomInt(2)) {
-    case 0:
-      os.write(data, 0, half);
-      for (int i = half; i < data.length; ++i) {
-        os.write(data[i]);
-      }
-      break;
-    case 1:
-      for (int i = 0; i < half; ++i) {
-        os.write(data[i]);
-      }
-      os.write(data, half, data.length - half);
-      break;
-    case 2:
-      os.write(data, 0, data.length);
-      break;
+      case 0:
+        os.write(data, 0, half);
+        for (int i = half; i < data.length; ++i) {
+          os.write(data[i]);
+        }
+        break;
+      case 1:
+        for (int i = 0; i < half; ++i) {
+          os.write(data[i]);
+        }
+        os.write(data, half, data.length - half);
+        break;
+      case 2:
+        os.write(data, 0, data.length);
+        break;
     }
     os.close();
 
-    final LZ4FastDecompressor decompressor = LZ4Factory.fastestInstance().fastDecompressor();
-    InputStream is = new LZ4BlockInputStream(open(compressed.toByteArray()), decompressor, checksum);
+    final LZ4BlockInputStream.Builder builder = preInitializedBuilder
+      .withStopOnEmptyBlock(true)
+      .withChecksum(checksum);
+    InputStream is = builder.build(open(compressed.toByteArray()));
     assertFalse(is.markSupported());
     try {
       is.mark(1);
@@ -241,7 +258,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     // test skip
     final int offset = data.length <= 1 ? 0 : randomInt(data.length - 1);
     final int length = randomInt(data.length - offset);
-    is = new LZ4BlockInputStream(open(compressed.toByteArray()), decompressor, checksum);
+    is = preInitializedBuilder.build(open(compressed.toByteArray()));
     restored = new byte[length + 1000];
     read = 0;
     while (read < offset) {
@@ -284,7 +301,10 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     out.close();
     out.close();
 
-    LZ4BlockInputStream in = new LZ4BlockInputStream(new ByteArrayInputStream(bytes.toByteArray()));
+    LZ4BlockInputStream in = preInitializedBuilder
+      .withChecksum(null)
+      .withStopOnEmptyBlock(true)
+      .build(new ByteArrayInputStream(bytes.toByteArray()));
     byte[] actual = new byte[testBytes.length];
     in.read(actual);
 
@@ -331,14 +351,19 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     System.arraycopy(bytes2, 0, concatenatedBytes, bytes1.length, bytes2.length);
 
     // In a default behaviour, we can read the first block of the concatenated bytes only
-    LZ4BlockInputStream in1 = new LZ4BlockInputStream(new ByteArrayInputStream(concatenatedBytes));
+    LZ4BlockInputStream in1 = preInitializedBuilder
+      .withChecksum(null)
+      .withStopOnEmptyBlock(true)
+      .build(new ByteArrayInputStream(concatenatedBytes));
     byte[] actual1 = new byte[128];
     assertEquals(64, readFully(in1, actual1));
     assertEquals(-1, in1.read());
     in1.close();
 
     // Check if we can read concatenated byte stream
-    LZ4BlockInputStream in2 = new LZ4BlockInputStream(new ByteArrayInputStream(concatenatedBytes), false);
+    LZ4BlockInputStream in2 = preInitializedBuilder
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(concatenatedBytes));
     byte[] actual2 = new byte[128];
     assertEquals(128, readFully(in2, actual2));
     assertEquals(-1, in2.read());
