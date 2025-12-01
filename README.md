@@ -143,7 +143,7 @@ int hash = hash32.getValue();
 
 You can download released artifacts from [Maven Central](https://central.sonatype.com/artifact/at.yawk.lz4/lz4-java).
 
-You can download pure-Java lz4-java from [Maven Central](https://search.maven.org/search?q=g:org.lz4%20a:lz4-pure-java). These artifacts include the Safe and Unsafe Java versions but not JNI bindings. (Experimental; no version with a fix for [CVE‐2025‐12183](https://sites.google.com/sonatype.com/vulnerabilities/cve-2025-12183) available yet)
+Prior to 1.8.1, there was also a lz4-pure-java artifact that excluded the JNI binary. This artifact has been discontinued because it is difficult to build and doesn't make a lot of sense from a design standpoint. The latest version of this artifact is still vulnerable to CVE‐2025‐12183. Please open an issue if you have a use case that requires this version.
 
 # Documentation
 
