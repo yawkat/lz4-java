@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ReadOnlyBufferException;
 
+/** <b>FOR INTERNAL USE ONLY</b> */
 public enum ByteBufferUtils {
   ;
 

@@ -18,6 +18,7 @@ package net.jpountz.util;
 
 import java.nio.ByteOrder;
 
+/** <b>FOR INTERNAL USE ONLY</b> */
 public enum Utils {
   ;
 

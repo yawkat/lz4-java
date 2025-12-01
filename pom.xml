@@ -321,6 +321,9 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+          <excludePackageNames>net.jpountz.util</excludePackageNames>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.gradlex</groupId>

@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.FilenameFilter;
 
-/** FOR INTERNAL USE ONLY */
+/** <b>FOR INTERNAL USE ONLY</b> */
 public enum Native {
   ;
 
