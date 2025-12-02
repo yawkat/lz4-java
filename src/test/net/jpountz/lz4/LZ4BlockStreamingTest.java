@@ -25,6 +25,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.function.Consumer;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
@@ -39,18 +40,26 @@ import com.carrotsearch.randomizedtesting.annotations.Repeat;
 
 public class LZ4BlockStreamingTest extends AbstractLZ4Test {
 
-  private final LZ4BlockInputStream.Builder preInitializedBuilder;
+  private final Consumer<LZ4BlockInputStream.Builder> decompressorConfigurer;
 
-  public LZ4BlockStreamingTest(LZ4BlockInputStream.Builder preInitializedBuilder) {
-    this.preInitializedBuilder = preInitializedBuilder;
+  public LZ4BlockStreamingTest(Consumer<LZ4BlockInputStream.Builder> decompressorConfigurer) {
+    this.decompressorConfigurer = decompressorConfigurer;
   }
 
   @ParametersFactory
-  public static Iterable<Object[]> preInitializedBuilders() {
+  public static Iterable<Object[]> decompressorConfigurers() {
     return Arrays.asList(new Object[][] {
-      { LZ4BlockInputStream.newBuilder().withDecompressor(LZ4Factory.fastestInstance().fastDecompressor()) },
-      { LZ4BlockInputStream.newBuilder().withDecompressor(LZ4Factory.fastestInstance().safeDecompressor()) }
+      // Don't create Builder here, otherwise the same Builder instance would be used for all tests, and the
+      // tests would interfere with each other due to the modifications to the builder
+      { (Consumer<LZ4BlockInputStream.Builder>) builder -> builder.withDecompressor(LZ4Factory.fastestInstance().fastDecompressor()) },
+      { (Consumer<LZ4BlockInputStream.Builder>) builder -> builder.withDecompressor(LZ4Factory.fastestInstance().safeDecompressor()) }
     });
+  }
+
+  private LZ4BlockInputStream.Builder lz4BlockInputStreamBuilder() {
+    var builder = LZ4BlockInputStream.newBuilder();
+    decompressorConfigurer.accept(builder);
+    return builder;
   }
 
   // An input stream that might read less data than it is able to
@@ -220,7 +229,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     }
     os.close();
 
-    final LZ4BlockInputStream.Builder builder = preInitializedBuilder
+    final LZ4BlockInputStream.Builder builder = lz4BlockInputStreamBuilder()
       .withStopOnEmptyBlock(true)
       .withChecksum(checksum);
     InputStream is = builder.build(open(compressed.toByteArray()));
@@ -258,7 +267,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     // test skip
     final int offset = data.length <= 1 ? 0 : randomInt(data.length - 1);
     final int length = randomInt(data.length - offset);
-    is = preInitializedBuilder.build(open(compressed.toByteArray()));
+    is = builder.build(open(compressed.toByteArray()));
     restored = new byte[length + 1000];
     read = 0;
     while (read < offset) {
@@ -301,8 +310,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     out.close();
     out.close();
 
-    LZ4BlockInputStream in = preInitializedBuilder
-      .withChecksum(null)
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
       .withStopOnEmptyBlock(true)
       .build(new ByteArrayInputStream(bytes.toByteArray()));
     byte[] actual = new byte[testBytes.length];
@@ -351,8 +359,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     System.arraycopy(bytes2, 0, concatenatedBytes, bytes1.length, bytes2.length);
 
     // In a default behaviour, we can read the first block of the concatenated bytes only
-    LZ4BlockInputStream in1 = preInitializedBuilder
-      .withChecksum(null)
+    LZ4BlockInputStream in1 = lz4BlockInputStreamBuilder()
       .withStopOnEmptyBlock(true)
       .build(new ByteArrayInputStream(concatenatedBytes));
     byte[] actual1 = new byte[128];
@@ -361,7 +368,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     in1.close();
 
     // Check if we can read concatenated byte stream
-    LZ4BlockInputStream in2 = preInitializedBuilder
+    LZ4BlockInputStream in2 = lz4BlockInputStreamBuilder()
       .withStopOnEmptyBlock(false)
       .build(new ByteArrayInputStream(concatenatedBytes));
     byte[] actual2 = new byte[128];
@@ -370,5 +377,30 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     in2.close();
 
     assertArrayEquals(expected, actual2);
+  }
+
+  @Test
+  public void testCorruptedStream() {
+    byte[] bytesWrongCompressed = {
+      76, 90, 52, 66, 108, 111, 99, 107, 32,
+      // Compressed length
+      6, 0, 0, 0, // malformed, should be 5
+      // Decompressed length
+      4, 0, 0, 0,
+      -125, -47, -30, 10, 64, 0, 1, 2, 3, 76, 90, 52, 66, 108, 111, 99, 107, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    var e = assertThrows(IOException.class, () -> lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(bytesWrongCompressed)).readAllBytes());
+    assertEquals("Stream is corrupted", e.getMessage());
+
+    byte[] bytesWrongDecompressed = {
+      76, 90, 52, 66, 108, 111, 99, 107, 32,
+      // Compressed length
+      5, 0, 0, 0,
+      // Decompressed length
+      5, 0, 0, 0, // malformed, should be 4
+      -125, -47, -30, 10, 64, 0, 1, 2, 3, 76, 90, 52, 66, 108, 111, 99, 107, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    e = assertThrows(IOException.class, () -> lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(bytesWrongDecompressed)).readAllBytes());
+    assertEquals("Stream is corrupted", e.getMessage());
   }
 }
