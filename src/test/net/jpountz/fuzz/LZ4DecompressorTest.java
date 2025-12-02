@@ -41,7 +41,7 @@ public class LZ4DecompressorTest {
           factory.safeDecompressor().decompress(src, srcOff, src.length - srcOffEnd - srcOff, dest, destOff);
         }
       }
-    } catch (LZ4Exception | ArrayIndexOutOfBoundsException ignored) {
+    } catch (LZ4Exception ignored) {
     }
   }
 
