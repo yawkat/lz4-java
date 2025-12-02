@@ -31,14 +31,14 @@ public class LZ4DecompressorTest {
         if (fast) {
           factory.fastDecompressor().decompress(srcBuf, srcOff, destBuf, destOff, destLen);
         } else {
-          factory.safeDecompressor().decompress(srcBuf, srcOff, src.length - srcOffEnd, destBuf, destOff, destLen);
+          factory.safeDecompressor().decompress(srcBuf, srcOff, src.length - srcOffEnd - srcOff, destBuf, destOff, destLen);
         }
       } else {
         byte[] dest = new byte[destOff + destLen];
         if (fast) {
           factory.fastDecompressor().decompress(src, srcOff, dest, destOff, destLen);
         } else {
-          factory.safeDecompressor().decompress(src, srcOff, src.length - srcOffEnd, dest, destOff);
+          factory.safeDecompressor().decompress(src, srcOff, src.length - srcOffEnd - srcOff, dest, destOff);
         }
       }
     } catch (LZ4Exception | ArrayIndexOutOfBoundsException ignored) {
