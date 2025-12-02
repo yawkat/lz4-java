@@ -411,6 +411,7 @@ public class LZ4BlockInputStream extends FilterInputStream {
 
     /**
      * Registers {@link Checksum} to be used by the builder
+     * <p>Note: Since checksum objects are stateful, if you set one explicitly here, the builder can only be used once.
      *
      * @param checksum          the {@link Checksum} instance to use, must be
      *                          equivalent to the instance which has been used to
