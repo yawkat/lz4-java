@@ -1,7 +1,0 @@
-<configuration xmlns="http://jgitver.github.io/maven/configuration/1.1.0"
-               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xsi:schemaLocation="http://jgitver.github.io/maven/configuration/1.1.0 https://jgitver.github.io/maven/configuration/jgitver-configuration-v1_1_0.xsd">
-    <!-- GitHub creates lightweight tags for releases, which the MAVEN strategy does not recognize. -->
-    <strategy>CONFIGURABLE</strategy>
-    <nonQualifierBranches>main,1.8.1</nonQualifierBranches>
-</configuration>

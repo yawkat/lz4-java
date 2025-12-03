@@ -21,7 +21,7 @@
 
   <groupId>at.yawk.lz4</groupId>
   <artifactId>lz4-java</artifactId>
-  <version>0.0.0</version> <!-- set by jgitver-maven-plugin -->
+  <version>0.0.0</version> <!-- set by maven-git-versioning-extension -->
   <packaging>jar</packaging>
 
   <name>LZ4 Java Compression</name>
