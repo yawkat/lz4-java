@@ -247,10 +247,10 @@ jobs:
           path: assemble/natives
       # Note: downloads all artifacts; we will merge their folder contents
 
-      - name: Prepare src/resources with collected natives
+      - name: Prepare target/classes with collected natives
         shell: bash
         run: |
-          rm -rf src/resources/net/jpountz/util || true
+          rm -rf target/classes/net/jpountz/util || true
           shopt -s nullglob
           for dir in assemble/natives/*; do
             base="$(basename "$dir")"
@@ -263,7 +263,7 @@ jobs:
               win32) ext=so ;;
               *) echo "Unknown OS in artifact: $base" >&2; continue ;;
             esac
-            dest="src/resources/net/jpountz/util/$os/$arch"
+            dest="target/classes/net/jpountz/util/$os/$arch"
             mkdir -p "$dest"
             if [ -f "$dir/liblz4-java.$ext" ]; then
               cp -f "$dir/liblz4-java.$ext" "$dest/"
@@ -276,12 +276,12 @@ jobs:
               fi
             fi
           done
-          echo "Contents of src/resources/net:"
-          find src/resources/net -maxdepth 3 -type f -print
+          echo "Contents of target/classes/net:"
+          find target/classes/net -maxdepth 3 -type f -print
 
       # with maven central
       - name: Build and deploy with Maven
-        run: ./mvnw -B -V -Pdeploy deploy
+        run: ./mvnw -B -V -Pdeploy,-native-linux deploy
         if: github.event_name == 'release' || inputs.publish
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
@@ -290,7 +290,7 @@ jobs:
 
       # without maven central
       - name: Build with Maven
-        run: ./mvnw -B -V verify
+        run: ./mvnw -B -V -P-native-linux verify
         if: github.event_name != 'release' && !inputs.publish
 
       - name: Upload final JAR
