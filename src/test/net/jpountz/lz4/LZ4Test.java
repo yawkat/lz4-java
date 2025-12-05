@@ -51,6 +51,7 @@ public class LZ4Test extends AbstractLZ4Test {
       // a Java process using lz4-java that was running concurrently
       // to this test process.
       File[] tempLibFiles = tempDir.listFiles(new FilenameFilter() {
+        @Override
         public boolean accept(File dir, String name) {
           return name.startsWith("liblz4-java-") && !name.endsWith(".lck");
         }
@@ -64,6 +65,7 @@ public class LZ4Test extends AbstractLZ4Test {
     }
     // A lock file must be accompanied by a temporary library.
     File[] tempLockFiles = tempDir.listFiles(new FilenameFilter() {
+      @Override
       public boolean accept(File dir, String name) {
         return name.startsWith("liblz4-java-") && name.endsWith(".lck");
       }
