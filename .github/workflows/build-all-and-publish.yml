@@ -209,7 +209,7 @@ jobs:
           java-version: '7'
 
       # with central credentials
-      - name: Setup Temurin JDK 21
+      - name: Setup Temurin JDK 21 (publish)
         uses: actions/setup-java@v5
         if: github.event_name == 'release' || inputs.publish
         with:
@@ -265,8 +265,8 @@ jobs:
               fi
             fi
           done
-          echo "Contents of target/classes/net:"
-          find target/classes/net -maxdepth 3 -type f -print
+          echo "Contents of target/classes/net/jpountz/util:"
+          find target/classes/net/jpountz/util -type f -print
 
       # with maven central
       - name: Build and deploy with Maven
