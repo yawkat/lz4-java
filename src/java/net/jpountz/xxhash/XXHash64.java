@@ -40,7 +40,7 @@ public abstract class XXHash64 {
   /**
    * Computes the hash of the given slice of the {@link ByteBuffer}.
    * {@link ByteBuffer#position() position} and {@link ByteBuffer#limit() limit}
-   * are not modified. 
+   * are not modified.
    *
    * @param buf the input data
    * @param off the start offset in buf

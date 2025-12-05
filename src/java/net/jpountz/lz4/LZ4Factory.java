@@ -23,6 +23,7 @@ import java.util.Arrays;
 
 import net.jpountz.util.Native;
 import net.jpountz.util.Utils;
+
 import static net.jpountz.lz4.LZ4Constants.DEFAULT_COMPRESSION_LEVEL;
 import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_LEVEL;
 
@@ -231,22 +232,22 @@ public final class LZ4Factory {
   private final LZ4Compressor highCompressor;
   private final LZ4FastDecompressor fastDecompressor;
   private final LZ4SafeDecompressor safeDecompressor;
-  private final LZ4Compressor[] highCompressors = new LZ4Compressor[MAX_COMPRESSION_LEVEL+1];
+  private final LZ4Compressor[] highCompressors = new LZ4Compressor[MAX_COMPRESSION_LEVEL + 1];
 
   private LZ4Factory(String impl, boolean insecureFastDecompressor) throws ClassNotFoundException, NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException, NoSuchMethodException, InstantiationException, InvocationTargetException {
     this.impl = impl;
     fastCompressor = classInstance("net.jpountz.lz4.LZ4" + impl + "Compressor");
     highCompressor = classInstance("net.jpountz.lz4.LZ4HC" + impl + "Compressor");
     if (insecureFastDecompressor) {
-        fastDecompressor = classInstance("net.jpountz.lz4.LZ4" + impl + "FastDecompressor");
+      fastDecompressor = classInstance("net.jpountz.lz4.LZ4" + impl + "FastDecompressor");
     } else {
-        fastDecompressor = LZ4JavaSafeFastDecompressor.INSTANCE;
+      fastDecompressor = LZ4JavaSafeFastDecompressor.INSTANCE;
     }
     safeDecompressor = classInstance("net.jpountz.lz4.LZ4" + impl + "SafeDecompressor");
     Constructor<? extends LZ4Compressor> highConstructor = highCompressor.getClass().getDeclaredConstructor(int.class);
     highCompressors[DEFAULT_COMPRESSION_LEVEL] = highCompressor;
-    for(int level = 1; level <= MAX_COMPRESSION_LEVEL; level++) {
-      if(level == DEFAULT_COMPRESSION_LEVEL) continue;
+    for (int level = 1; level <= MAX_COMPRESSION_LEVEL; level++) {
+      if (level == DEFAULT_COMPRESSION_LEVEL) continue;
       highCompressors[level] = highConstructor.newInstance(level);
     }
 
@@ -310,7 +311,7 @@ public final class LZ4Factory {
    * {@link #fastCompressor()} and is slower but compresses more efficiently.
    */
   public LZ4Compressor highCompressor(int compressionLevel) {
-    if(compressionLevel > MAX_COMPRESSION_LEVEL) {
+    if (compressionLevel > MAX_COMPRESSION_LEVEL) {
       compressionLevel = MAX_COMPRESSION_LEVEL;
     } else if (compressionLevel < 1) {
       compressionLevel = DEFAULT_COMPRESSION_LEVEL;

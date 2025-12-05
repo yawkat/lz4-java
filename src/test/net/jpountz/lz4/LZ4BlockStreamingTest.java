@@ -157,19 +157,19 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
   }
 
   @Test
-  @Repeat(iterations=5)
+  @Repeat(iterations = 5)
   public void testRoundtripGeo() throws IOException {
     testRoundTrip("/calgary/geo");
   }
 
   @Test
-  @Repeat(iterations=5)
+  @Repeat(iterations = 5)
   public void testRoundtripBook1() throws IOException {
     testRoundTrip("/calgary/book1");
   }
 
   @Test
-  @Repeat(iterations=5)
+  @Repeat(iterations = 5)
   public void testRoundtripPic() throws IOException {
     testRoundTrip("/calgary/pic");
   }
@@ -286,7 +286,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
   }
 
   @Test
-  @Repeat(iterations=20)
+  @Repeat(iterations = 20)
   public void testRoundtripRandom() throws IOException {
     final int size = randomFloat() < 0.1f ? randomInt(5) : randomInt(1 << 20);
     final byte[] data = randomArray(size, randomBoolean() ? randomIntBetween(1, 5) : randomIntBetween(6, 100));
@@ -327,7 +327,7 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     int result;
     for (total = 0; total < b.length; total += result) {
       result = in.read(b, total, b.length - total);
-      if(result == -1) {
+      if (result == -1) {
         break;
       }
     }

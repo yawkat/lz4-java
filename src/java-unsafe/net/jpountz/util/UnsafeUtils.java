@@ -33,7 +33,7 @@ public enum UnsafeUtils {
   private static final int INT_ARRAY_SCALE;
   private static final long SHORT_ARRAY_OFFSET;
   private static final int SHORT_ARRAY_SCALE;
-  
+
   static {
     try {
       Field theUnsafe = Unsafe.class.getDeclaredField("theUnsafe");

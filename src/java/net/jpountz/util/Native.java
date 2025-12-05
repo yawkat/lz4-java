@@ -53,7 +53,7 @@ public enum Native {
       return OS.SOLARIS;
     } else {
       throw new UnsupportedOperationException("Unsupported operating system: "
-          + osName);
+        + osName);
     }
   }
 
@@ -75,22 +75,24 @@ public enum Native {
     File dir = new File(tempFolder);
 
     File[] tempLibFiles = dir.listFiles(new FilenameFilter() {
-	private final String searchPattern = "liblz4-java-";
-	public boolean accept(File dir, String name) {
-	  return name.startsWith(searchPattern) && !name.endsWith(".lck");
-	}
-      });
-    if(tempLibFiles != null) {
-      for(File tempLibFile : tempLibFiles) {
-	File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
-	if(!lckFile.exists()) {
-	  try {
-	    tempLibFile.delete();
-	  }
-	  catch(SecurityException e) {
-	    System.err.println("Failed to delete old temp lib" + e.getMessage());
-	  }
-	}
+      private final String searchPattern = "liblz4-java-";
+
+      @Override
+      public boolean accept(File dir, String name) {
+        return name.startsWith(searchPattern) && !name.endsWith(".lck");
+      }
+    });
+
+    if (tempLibFiles != null) {
+      for (File tempLibFile : tempLibFiles) {
+        File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
+        if (!lckFile.exists()) {
+          try {
+            tempLibFile.delete();
+          } catch (SecurityException e) {
+            System.err.println("Failed to delete old temp lib: " + e.getMessage());
+          }
+        }
       }
     }
   }
@@ -125,14 +127,14 @@ public enum Native {
       tempLib = new File(tempLibLock.getAbsolutePath().replaceFirst(".lck$", ""));
       // copy to tempLib
       try (FileOutputStream out = new FileOutputStream(tempLib)) {
-	byte[] buf = new byte[4096];
-	while (true) {
-	  int read = is.read(buf);
-	  if (read == -1) {
-	    break;
-	  }
-	  out.write(buf, 0, read);
-	}
+        byte[] buf = new byte[4096];
+        while (true) {
+          int read = is.read(buf);
+          if (read == -1) {
+            break;
+          }
+          out.write(buf, 0, read);
+        }
       }
       System.load(tempLib.getAbsolutePath());
       loaded = true;
@@ -140,23 +142,23 @@ public enum Native {
       throw new ExceptionInInitializerError("Cannot unpack liblz4-java: " + e);
     } finally {
       if (!loaded) {
-	if (tempLib != null && tempLib.exists()) {
-	  if (!tempLib.delete()) {
-	    throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary native library " + tempLib);
-	  }
-	}
-	if (tempLibLock != null && tempLibLock.exists()) {
-	  if (!tempLibLock.delete()) {
-	    throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary lock file " + tempLibLock);
-	  }
-	}
+        if (tempLib != null && tempLib.exists()) {
+          if (!tempLib.delete()) {
+            throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary native library " + tempLib);
+          }
+        }
+        if (tempLibLock != null && tempLibLock.exists()) {
+          if (!tempLibLock.delete()) {
+            throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary lock file " + tempLibLock);
+          }
+        }
       } else {
         final String keepEnv = System.getenv("LZ4JAVA_KEEP_TEMP_JNI_LIB");
         final String keepProp = System.getProperty("lz4java.jnilib.temp.keep");
         if ((keepEnv == null || !keepEnv.equals("true")) &&
             (keepProp == null || !keepProp.equals("true")))
           tempLib.deleteOnExit();
-	tempLibLock.deleteOnExit();
+        tempLibLock.deleteOnExit();
       }
     }
   }

@@ -44,41 +44,41 @@ public class LZ4Test extends AbstractLZ4Test {
     String tempFolder = new File(System.getProperty("java.io.tmpdir")).getAbsolutePath();
     File tempDir = new File(new File(System.getProperty("java.io.tmpdir")).getAbsolutePath());
     if (!System.getProperty("os.name").contains("Windows")) {
-	// A temporary library must be accompanied by a lock file.
-	// On Windows, JVM does not remove a temporary library on exit.
-	// This means on Windows, there might be a temporary library
-	// that is not accompanied by a lock file when there was
-	// a Java process using lz4-java that was running concurrently
-	// to this test process.
-	File[] tempLibFiles = tempDir.listFiles(new FilenameFilter() {
-		public boolean accept(File dir, String name) {
-		    return name.startsWith("liblz4-java-") && !name.endsWith(".lck");
-		}
-	    });
-	if (tempLibFiles != null) {
-	    for (File tempLibFile : tempLibFiles) {
-		File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
-		assertTrue(tempLibFile.getAbsolutePath(), lckFile.exists());
-	    }
-	}
+      // A temporary library must be accompanied by a lock file.
+      // On Windows, JVM does not remove a temporary library on exit.
+      // This means on Windows, there might be a temporary library
+      // that is not accompanied by a lock file when there was
+      // a Java process using lz4-java that was running concurrently
+      // to this test process.
+      File[] tempLibFiles = tempDir.listFiles(new FilenameFilter() {
+        public boolean accept(File dir, String name) {
+          return name.startsWith("liblz4-java-") && !name.endsWith(".lck");
+        }
+      });
+      if (tempLibFiles != null) {
+        for (File tempLibFile : tempLibFiles) {
+          File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
+          assertTrue(tempLibFile.getAbsolutePath(), lckFile.exists());
+        }
+      }
     }
     // A lock file must be accompanied by a temporary library.
     File[] tempLockFiles = tempDir.listFiles(new FilenameFilter() {
-	public boolean accept(File dir, String name) {
-	  return name.startsWith("liblz4-java-") && name.endsWith(".lck");
-	}
-      });
+      public boolean accept(File dir, String name) {
+        return name.startsWith("liblz4-java-") && name.endsWith(".lck");
+      }
+    });
     if (tempLockFiles != null) {
       for (File tempLockFile : tempLockFiles) {
-	String tempLockFilePath = tempLockFile.getAbsolutePath();
-	File libFile = new File(tempLockFilePath.substring(0, tempLockFilePath.length() - 4));
-	assertTrue(tempLockFilePath, libFile.exists());
+        String tempLockFilePath = tempLockFile.getAbsolutePath();
+        File libFile = new File(tempLockFilePath.substring(0, tempLockFilePath.length() - 4));
+        assertTrue(tempLockFilePath, libFile.exists());
       }
     }
   }
 
   @Test
-  @Repeat(iterations=50)
+  @Repeat(iterations = 50)
   public void testMaxCompressedLength() {
     final int len = randomBoolean() ? randomInt(16) : randomInt(1 << 30);
     for (LZ4Compressor compressor : COMPRESSORS) {
@@ -187,7 +187,7 @@ public class LZ4Test extends AbstractLZ4Test {
 
     // make sure it fails if the compression dest is not large enough
     tester.fill(restored, randomByte());
-    final T compressed2 = tester.allocate(compressedLen-1);
+    final T compressed2 = tester.allocate(compressedLen - 1);
     try {
       final int compressedLen2 = tester.compress(compressor,
           tester.copyOf(data), off, len,
@@ -207,22 +207,22 @@ public class LZ4Test extends AbstractLZ4Test {
       // because it ignores destLen.
 
       if (len > 0) {
-	// decompression dest is too small
-	try {
-	  tester.decompress(decompressor, compressed, 0, restored, 0, len - 1);
-	  fail();
-	} catch (LZ4Exception e) {
-	  // OK
-	}
+        // decompression dest is too small
+        try {
+          tester.decompress(decompressor, compressed, 0, restored, 0, len - 1);
+          fail();
+        } catch (LZ4Exception e) {
+          // OK
+        }
       }
 
       // decompression dest is too large
-      final T restored2 = tester.allocate(len+1);
+      final T restored2 = tester.allocate(len + 1);
       try {
-	final int cpLen = tester.decompress(decompressor, compressed, 0, restored2, 0, len + 1);
-	fail("compressedLen=" + cpLen);
+        final int cpLen = tester.decompress(decompressor, compressed, 0, restored2, 0, len + 1);
+        fail("compressedLen=" + cpLen);
       } catch (LZ4Exception e) {
-	// OK
+        // OK
       }
     }
 
@@ -267,23 +267,23 @@ public class LZ4Test extends AbstractLZ4Test {
                                               original,
                                               compressed);
     if (original instanceof ByteBuffer) {
-      assertEquals(data.length, ((ByteBuffer)original).position());
-      assertEquals(compressedLen, ((ByteBuffer)compressed).position());
-      ((ByteBuffer)original).rewind();
-      ((ByteBuffer)compressed).rewind();
+      assertEquals(data.length, ((ByteBuffer) original).position());
+      assertEquals(compressedLen, ((ByteBuffer) compressed).position());
+      ((ByteBuffer) original).rewind();
+      ((ByteBuffer) compressed).rewind();
     }
 
     // test decompression
     final T restored = tester.allocate(data.length);
     assertEquals(compressedLen, tester.decompress(decompressor, compressed, restored));
     if (original instanceof ByteBuffer) {
-      assertEquals(compressedLen, ((ByteBuffer)compressed).position());
-      assertEquals(data.length, ((ByteBuffer)restored).position());
+      assertEquals(compressedLen, ((ByteBuffer) compressed).position());
+      assertEquals(data.length, ((ByteBuffer) restored).position());
     }
     assertArrayEquals(data, tester.copyOf(restored, 0, data.length));
     if (original instanceof ByteBuffer) {
-      ((ByteBuffer)compressed).rewind();
-      ((ByteBuffer)restored).rewind();
+      ((ByteBuffer) compressed).rewind();
+      ((ByteBuffer) restored).rewind();
     }
 
     // try decompression when only the size of the compressed buffer is known
@@ -292,13 +292,13 @@ public class LZ4Test extends AbstractLZ4Test {
     final T compressedExactSize = tester.copyOf(tester.copyOf(compressed, 0, compressedLen));
     assertEquals(data.length, tester.decompress(decompressor2, compressedExactSize, restored));
     if (original instanceof ByteBuffer) {
-      assertEquals(compressedLen, ((ByteBuffer)compressedExactSize).position());
-      assertEquals(data.length, ((ByteBuffer)restored).position());
+      assertEquals(compressedLen, ((ByteBuffer) compressedExactSize).position());
+      assertEquals(data.length, ((ByteBuffer) restored).position());
     }
     assertArrayEquals(data, tester.copyOf(restored, 0, data.length));
     if (original instanceof ByteBuffer) {
-      ((ByteBuffer)compressedExactSize).rewind();
-      ((ByteBuffer)restored).rewind();
+      ((ByteBuffer) compressedExactSize).rewind();
+      ((ByteBuffer) restored).rewind();
     }
   }
 
@@ -318,7 +318,7 @@ public class LZ4Test extends AbstractLZ4Test {
           LZ4Factory.nativeInsecureInstance(),
           LZ4Factory.unsafeInsecureInstance(),
           LZ4Factory.safeInstance())) {
-	testRoundTrip(data, off, len, compressorFactory, decompressorFactory);
+        testRoundTrip(data, off, len, compressorFactory, decompressorFactory);
       }
     }
   }
@@ -454,7 +454,7 @@ public class LZ4Test extends AbstractLZ4Test {
   }
 
   @Test
-  @Repeat(iterations=5)
+  @Repeat(iterations = 5)
   public void testAllEqual() {
     final int len = randomBoolean() ? randomInt(20) : randomInt(100000);
     final byte[] buf = new byte[len];
@@ -475,7 +475,7 @@ public class LZ4Test extends AbstractLZ4Test {
   }
 
   @Test
-  @Repeat(iterations=10)
+  @Repeat(iterations = 10)
   public void testRandomData() {
     final int n = randomIntBetween(1, 15);
     final int off = randomInt(1000);
@@ -596,7 +596,7 @@ public class LZ4Test extends AbstractLZ4Test {
     @Override
     public String toString() {
       return "Sequence [literalLen=" + literalLen + ", matchDec=" + matchDec
-          + ", matchLen=" + matchLen + "]";
+        + ", matchLen=" + matchLen + "]";
     }
 
     @Override

@@ -38,7 +38,7 @@ enum LZ4SafeUtils {
   }
 
   static boolean readIntEquals(byte[] buf, int i, int j) {
-    return buf[i] == buf[j] && buf[i+1] == buf[j+1] && buf[i+2] == buf[j+2] && buf[i+3] == buf[j+3];
+    return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
   }
 
   static void safeIncrementalCopy(byte[] dest, int matchOff, int dOff, int matchLen) {

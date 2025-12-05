@@ -140,6 +140,7 @@ public abstract class LZ4SafeDecompressor implements LZ4UnknownSizeDecompressor 
    * Decompresses <code>src</code> into <code>dest</code>. <code>src</code>'s
    * {@link ByteBuffer#remaining()} must be exactly the size of the compressed
    * data. This method moves the positions of the buffers.
+   *
    * @param src the compressed data
    * @param dest the destination buffer to store the decompressed data
    * @throws LZ4Exception if dest is too small

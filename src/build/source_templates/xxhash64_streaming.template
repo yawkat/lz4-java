@@ -58,7 +58,7 @@ final class StreamingXXHash64Java${type} extends AbstractStreamingXXHash64Java {
     int off = 0;
     while (off <= memSize - 8) {
       long k1 = readLongLE(memory, off);
-	  k1 *= PRIME64_2; k1 = rotateLeft(k1, 31); k1 *= PRIME64_1; h64 ^= k1;
+      k1 *= PRIME64_2; k1 = rotateLeft(k1, 31); k1 *= PRIME64_1; h64 ^= k1;
       h64 = rotateLeft(h64, 27) * PRIME64_1 + PRIME64_4;
       off += 8;
     }

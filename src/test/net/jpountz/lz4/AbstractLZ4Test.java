@@ -54,7 +54,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
 
       @Override
       public int maxCompressedLength(int len) {
-	return LZ4Utils.maxCompressedLength(len);
+        return LZ4Utils.maxCompressedLength(len);
       }
 
       @Override
@@ -104,7 +104,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
 
       @Override
       public int maxCompressedLength(int len) {
-	return LZ4Utils.maxCompressedLength(len);
+        return LZ4Utils.maxCompressedLength(len);
       }
 
       @Override
@@ -142,6 +142,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
         return decompressor.decompress(src, srcOff, srcLen, dest, destOff, maxDestLen);
       }
     }
+
     public static final Tester<byte[]> BYTE_ARRAY = new ByteArrayTester();
     public static final Tester<byte[]> BYTE_ARRAY_WITH_LENGTH = new ByteArrayTester() {
       @Override
@@ -183,6 +184,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
         return decompressor.decompress(src, srcOff, srcLen, dest, destOff, maxDestLen);
       }
     }
+
     public static final Tester<ByteBuffer> BYTE_BUFFER = new ByteBufferTester();
     public static final Tester<ByteBuffer> BYTE_BUFFER_WITH_LENGTH = new ByteBufferTester() {
       @Override
@@ -229,6 +231,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
         return decompressor.decompress(src, dest);
       }
     }
+
     public static final SrcDestTester<byte[]> BYTE_ARRAY = new ByteArrayTester();
     public static final SrcDestTester<byte[]> BYTE_ARRAY_WITH_LENGTH = new ByteArrayTester() {
       @Override
@@ -270,6 +273,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
         return dest.position() - pos;
       }
     }
+
     public static final SrcDestTester<ByteBuffer> BYTE_BUFFER = new ByteBufferTester();
     public static final SrcDestTester<ByteBuffer> BYTE_BUFFER_WITH_LENGTH = new ByteBufferTester() {
       @Override
@@ -297,6 +301,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
 
   protected class RandomBytes {
     private final byte[] bytes;
+
     RandomBytes(int n) {
       assert n > 0 && n <= 256;
       bytes = new byte[n];
@@ -304,6 +309,7 @@ public abstract class AbstractLZ4Test extends RandomizedTest {
         bytes[i] = (byte) randomInt(255);
       }
     }
+
     byte next() {
       final int i = randomInt(bytes.length - 1);
       return bytes[i];

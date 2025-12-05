@@ -58,7 +58,7 @@ public final class XXHashFactory {
 
   /**
    * Returns a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  are native bindings to the original C API.
+   * are native bindings to the original C API.
    * <p>
    * Please note that this instance has some traps you should be aware of:<ol>
    * <li>Upon loading this instance, files will be written to the temporary
@@ -75,7 +75,7 @@ public final class XXHashFactory {
    * </ol>
    *
    * @return a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  are native bindings to the original C API.
+   * are native bindings to the original C API.
    */
   public static synchronized XXHashFactory nativeInstance() {
     if (NATIVE_INSTANCE == null) {
@@ -86,10 +86,10 @@ public final class XXHashFactory {
 
   /**
    * Returns a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  are written with Java's official API.
+   * are written with Java's official API.
    *
    * @return a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  are written with Java's official API.
+   * are written with Java's official API.
    */
   public static synchronized XXHashFactory safeInstance() {
     if (JAVA_SAFE_INSTANCE == null) {
@@ -100,10 +100,10 @@ public final class XXHashFactory {
 
   /**
    * Returns a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  may use {@link sun.misc.Unsafe} to speed up hashing.
+   * may use {@link sun.misc.Unsafe} to speed up hashing.
    *
    * @return a {@link XXHashFactory} that returns {@link XXHash32} instances that
-   *  may use {@link sun.misc.Unsafe} to speed up hashing.
+   * may use {@link sun.misc.Unsafe} to speed up hashing.
    */
   public static synchronized XXHashFactory unsafeInstance() {
     if (JAVA_UNSAFE_INSTANCE == null) {

@@ -41,7 +41,7 @@ public abstract class LZ4Compressor {
    * Compresses <code>src[srcOff:srcOff+srcLen]</code> into
    * <code>dest[destOff:destOff+maxDestLen]</code> and returns the compressed
    * length.
-   *
+   * <p>
    * This method will throw a {@link LZ4Exception} if this compressor is unable
    * to compress the input into less than <code>maxDestLen</code> bytes. To
    * prevent this exception to be thrown, you should make sure that
@@ -62,12 +62,12 @@ public abstract class LZ4Compressor {
    * Compresses <code>src[srcOff:srcOff+srcLen]</code> into
    * <code>dest[destOff:destOff+maxDestLen]</code> and returns the compressed
    * length.
-   *
+   * <p>
    * This method will throw a {@link LZ4Exception} if this compressor is unable
    * to compress the input into less than <code>maxDestLen</code> bytes. To
    * prevent this exception to be thrown, you should make sure that
    * <code>maxDestLen &gt;= maxCompressedLength(srcLen)</code>.
-   *
+   * <p>
    * {@link ByteBuffer} positions remain unchanged.
    *
    * @param src the source data

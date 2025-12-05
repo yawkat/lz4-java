@@ -70,7 +70,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @param in the stream to decompress
    * @throws IOException if an I/O error occurs
    *
-   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor,  XXHash32)
+   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor, XXHash32)
    * @see LZ4Factory#fastestInstance()
    * @see XXHashFactory#fastestInstance()
    */
@@ -85,7 +85,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @param readSingleFrame whether read is stopped after the first non-skippable frame
    * @throws IOException if an I/O error occurs
    *
-   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor,  XXHash32)
+   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor, XXHash32)
    * @see LZ4Factory#fastestInstance()
    * @see XXHashFactory#fastestInstance()
    */
@@ -102,9 +102,9 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @param checksum the hash function to use
    * @throws IOException if an I/O error occurs
    *
-   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor,  XXHash32, boolean)
+   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor, XXHash32, boolean)
    */
-  public LZ4FrameInputStream(InputStream in, LZ4SafeDecompressor decompressor,  XXHash32 checksum) throws IOException {
+  public LZ4FrameInputStream(InputStream in, LZ4SafeDecompressor decompressor, XXHash32 checksum) throws IOException {
     this(in, decompressor, checksum, false);
   }
 
@@ -117,7 +117,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @param readSingleFrame whether read is stopped after the first non-skippable frame
    * @throws IOException if an I/O error occurs
    */
-  public LZ4FrameInputStream(InputStream in, LZ4SafeDecompressor decompressor,  XXHash32 checksum, boolean readSingleFrame) throws IOException {
+  public LZ4FrameInputStream(InputStream in, LZ4SafeDecompressor decompressor, XXHash32 checksum, boolean readSingleFrame) throws IOException {
     super(in);
     this.decompressor = decompressor;
     this.checksum = checksum;
@@ -128,6 +128,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   /**
    * Try and load in the next valid frame info. This will skip over skippable frames.
+   *
    * @return True if a frame was loaded. False if there are no more frames in the stream.
    * @throws IOException On input stream read exception
    */
@@ -135,8 +136,8 @@ public class LZ4FrameInputStream extends FilterInputStream {
     while (true) {
       int size = 0;
       do {
-	final int mySize = in.read(readNumberBuff.array(), size, LZ4FrameOutputStream.INTEGER_BYTES - size);
-	if (mySize < 0) {
+        final int mySize = in.read(readNumberBuff.array(), size, LZ4FrameOutputStream.INTEGER_BYTES - size);
+        if (mySize < 0) {
           if (firstFrameHeaderRead) {
             if (size > 0) {
               throw new IOException(PREMATURE_EOS);
@@ -146,17 +147,17 @@ public class LZ4FrameInputStream extends FilterInputStream {
           } else {
             throw new IOException(PREMATURE_EOS);
           }
-	}
-	size += mySize;
+        }
+        size += mySize;
       } while (size < LZ4FrameOutputStream.INTEGER_BYTES);
       final int magic = readNumberBuff.getInt(0);
       if (magic == LZ4FrameOutputStream.MAGIC) {
-	readHeader();
-	return true;
+        readHeader();
+        return true;
       } else if ((magic >>> 4) == (MAGIC_SKIPPABLE_BASE >>> 4)) {
-	skippableFrame();
+        skippableFrame();
       } else {
-	throw new IOException(NOT_SUPPORTED);
+        throw new IOException(NOT_SUPPORTED);
       }
     }
   }
@@ -191,10 +192,10 @@ public class LZ4FrameInputStream extends FilterInputStream {
       throw new IOException(PREMATURE_EOS);
     }
 
-    final byte flgByte = (byte)(flgRead & 0xFF);
+    final byte flgByte = (byte) (flgRead & 0xFF);
     final LZ4FrameOutputStream.FLG flg = LZ4FrameOutputStream.FLG.fromByte(flgByte);
     headerBuffer.put(flgByte);
-    final byte bdByte = (byte)(bdRead & 0xFF);
+    final byte bdByte = (byte) (bdRead & 0xFF);
     final LZ4FrameOutputStream.BD bd = LZ4FrameOutputStream.BD.fromByte(bdByte);
     headerBuffer.put(bdByte);
 
@@ -213,7 +214,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
       throw new IOException(PREMATURE_EOS);
     }
 
-    if (hash != (byte)(expectedHash & 0xFF)) {
+    if (hash != (byte) (expectedHash & 0xFF)) {
       throw new IOException(DESCRIPTOR_HASH_MISMATCH);
     }
 
@@ -271,7 +272,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
         }
       }
       if (frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE) && expectedContentSize != totalContentSize) {
-	throw new IOException("Size check mismatch");
+        throw new IOException("Size check mismatch");
       }
       frameInfo.finish();
       return;
@@ -329,13 +330,13 @@ public class LZ4FrameInputStream extends FilterInputStream {
         if (firstFrameHeaderRead && readSingleFrame) {
           return -1;
         }
-	if (!nextFrameInfo()) {
-	  return -1;
-	}
+        if (!nextFrameInfo()) {
+          return -1;
+        }
       }
       readBlock();
     }
-    return (int)buffer.get() & 0xFF;
+    return (int) buffer.get() & 0xFF;
   }
 
   @Override
@@ -348,9 +349,9 @@ public class LZ4FrameInputStream extends FilterInputStream {
         if (firstFrameHeaderRead && readSingleFrame) {
           return -1;
         }
-	if (!nextFrameInfo()) {
-	  return -1;
-	}
+        if (!nextFrameInfo()) {
+          return -1;
+        }
       }
       readBlock();
     }
@@ -369,14 +370,14 @@ public class LZ4FrameInputStream extends FilterInputStream {
         if (firstFrameHeaderRead && readSingleFrame) {
           return 0;
         }
-	if (!nextFrameInfo()) {
-	  return 0;
-	}
+        if (!nextFrameInfo()) {
+          return 0;
+        }
       }
       readBlock();
     }
     n = Math.min(n, buffer.remaining());
-    buffer.position(buffer.position() + (int)n);
+    buffer.position(buffer.position() + (int) n);
     return n;
   }
 
@@ -413,7 +414,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @return the expected content size, or -1L if no expected content size is set in the frame.
    * @throws IOException On input stream read exception
    *
-   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor,  XXHash32, boolean)
+   * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor, XXHash32, boolean)
    */
   public long getExpectedContentSize() throws IOException {
     if (!readSingleFrame) {
@@ -421,7 +422,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
     if (!firstFrameHeaderRead) {
       if (!nextFrameInfo()) {
-	return -1L;
+        return -1L;
       }
     }
     return expectedContentSize;
@@ -436,9 +437,9 @@ public class LZ4FrameInputStream extends FilterInputStream {
   public boolean isExpectedContentSizeDefined() throws IOException {
     if (readSingleFrame) {
       if (!firstFrameHeaderRead) {
-	if (!nextFrameInfo()) {
-	  return false;
-	}
+        if (!nextFrameInfo()) {
+          return false;
+        }
       }
       return expectedContentSize >= 0;
     } else {

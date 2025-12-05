@@ -34,7 +34,8 @@ import java.nio.ByteBuffer;
  */
 public abstract class LZ4FastDecompressor implements LZ4Decompressor {
 
-  /** Decompresses <code>src[srcOff:]</code> into <code>dest[destOff:destOff+destLen]</code>
+  /**
+   * Decompresses <code>src[srcOff:]</code> into <code>dest[destOff:destOff+destLen]</code>
    * and returns the number of bytes read from <code>src</code>.
    * <code>destLen</code> must be exactly the size of the decompressed data.
    *
@@ -47,7 +48,8 @@ public abstract class LZ4FastDecompressor implements LZ4Decompressor {
    */
   public abstract int decompress(byte[] src, int srcOff, byte[] dest, int destOff, int destLen);
 
-  /** Decompresses <code>src[srcOff:]</code> into <code>dest[destOff:destOff+destLen]</code>
+  /**
+   * Decompresses <code>src[srcOff:]</code> into <code>dest[destOff:destOff+destLen]</code>
    * and returns the number of bytes read from <code>src</code>.
    * <code>destLen</code> must be exactly the size of the decompressed data.
    * The positions and limits of the {@link ByteBuffer}s remain unchanged.

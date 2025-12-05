@@ -54,7 +54,7 @@ import java.util.Random;
 public class LZ4FrameIOStreamTest {
   private static void copy(InputStream in, OutputStream out) throws IOException {
     final byte[] buffer = new byte[1 << 10];
-    int inSize = in.read(buffer);;
+    int inSize = in.read(buffer);
     while (inSize >= 0) {
       out.write(buffer, 0, inSize);
       inSize = in.read(buffer);
@@ -71,7 +71,7 @@ public class LZ4FrameIOStreamTest {
   }
 
   @Parameterized.Parameters
-  public static Iterable<Object[]> parameters(){
+  public static Iterable<Object[]> parameters() {
     final List<Object[]> retval = new LinkedList<>(
         Arrays.asList(
             new Object[]{0},
@@ -83,7 +83,7 @@ public class LZ4FrameIOStreamTest {
             new Object[]{1 << 20}
         ));
     final Random rnd = new Random(78370789134L); // Chosen by lightly  smashing my keyboard a few times.
-    for(int i = 0; i < 10; ++i){
+    for (int i = 0; i < 10; ++i) {
       retval.add(new Object[]{Math.abs(rnd.nextInt()) % (1 << 22)});
     }
     return retval;
@@ -91,7 +91,7 @@ public class LZ4FrameIOStreamTest {
 
   private final int testSize;
 
-  public LZ4FrameIOStreamTest(int testSize){
+  public LZ4FrameIOStreamTest(int testSize) {
     this.testSize = testSize;
   }
 
@@ -120,7 +120,7 @@ public class LZ4FrameIOStreamTest {
 
   @After
   public void tearDown() {
-    if (tmpFile != null && tmpFile.exists() && !tmpFile.delete()){
+    if (tmpFile != null && tmpFile.exists() && !tmpFile.delete()) {
       Assert.fail(String.format("Could not delete file [%s]", tmpFile.getAbsolutePath()));
     }
   }
@@ -155,15 +155,15 @@ public class LZ4FrameIOStreamTest {
   private void validateStreamEqualsWithPerByteRead(InputStream is, File file) throws IOException {
     try (InputStream fis = new FileInputStream(file)) {
       for (int size = (int) file.length(); size > 0; size--) {
-	int byte0 = is.read();
-	int byte1 = fis.read();
-	Assert.assertEquals(byte0, byte1);
-	if (byte0 == -1) {
-	  throw new EOFException("End of stream");
-	}
-	if (byte1 == -1) {
-	  throw new EOFException("End of stream");
-	}
+        int byte0 = is.read();
+        int byte1 = fis.read();
+        Assert.assertEquals(byte0, byte1);
+        if (byte0 == -1) {
+          throw new EOFException("End of stream");
+        }
+        if (byte1 == -1) {
+          throw new EOFException("End of stream");
+        }
       }
     }
   }
@@ -292,7 +292,7 @@ public class LZ4FrameIOStreamTest {
         fos.write(skipBuffer.array());
       }
       try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
-	Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
       }
       // Extra one byte at the tail
       try (InputStream is = new LZ4FrameInputStream(new SequenceInputStream(new FileInputStream(lz4File), new ByteArrayInputStream(new byte[1])))) {
@@ -385,7 +385,7 @@ public class LZ4FrameIOStreamTest {
         }
       }
       final long oneLength = lz4File.length();
-      try (OutputStream os = new FileOutputStream(lz4File, true)){
+      try (OutputStream os = new FileOutputStream(lz4File, true)) {
         for (int i = 0; i < 3; ++i) {
           try (InputStream is = new FileInputStream(lz4File)) {
             long size = oneLength;
@@ -449,7 +449,7 @@ public class LZ4FrameIOStreamTest {
       Process process = builder.start();
       int retval = process.waitFor();
       Assert.assertEquals(0, retval);
-      try(InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))){
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
         validateStreamEquals(is, tmpFile);
       }
     } finally {
@@ -459,22 +459,22 @@ public class LZ4FrameIOStreamTest {
 
   @Test
   public void testUncompressableEnd() throws IOException {
-    final byte data = (byte)0xEE;
-    try(final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-      try(final OutputStream os = new LZ4FrameOutputStream(baos, LZ4FrameOutputStream.BLOCKSIZE.SIZE_1MB)) {
+    final byte data = (byte) 0xEE;
+    try (final ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+      try (final OutputStream os = new LZ4FrameOutputStream(baos, LZ4FrameOutputStream.BLOCKSIZE.SIZE_1MB)) {
         os.write(data);
       }
       final byte[] bytes = baos.toByteArray();
-      try(final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
-        Assert.assertEquals(data, (byte)is.read());
+      try (final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
+        Assert.assertEquals(data, (byte) is.read());
       }
 
       final ByteBuffer buffer = ByteBuffer.wrap(bytes);
       // Make sure final "block" is a zero length block, then set it to an incompressible zero length block.
       Assert.assertEquals(0, buffer.getInt(bytes.length - (Integer.SIZE >> 3)));
       buffer.putInt(bytes.length - (Integer.SIZE >> 3), LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK);
-      try(final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
-        Assert.assertEquals(data, (byte)is.read());
+      try (final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
+        Assert.assertEquals(data, (byte) is.read());
       }
     }
   }

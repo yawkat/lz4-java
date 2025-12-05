@@ -228,7 +228,7 @@ public class LZ4BlockOutputStream extends FilterOutputStream {
 
   /**
    * Flushes this compressed {@link OutputStream}.
-   *
+   * <p>
    * If the stream has been created with <code>syncFlush=true</code>, pending
    * data will be compressed and appended to the underlying {@link OutputStream}
    * before calling {@link OutputStream#flush()} on the underlying stream.

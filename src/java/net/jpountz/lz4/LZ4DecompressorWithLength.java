@@ -229,7 +229,8 @@ public class LZ4DecompressorWithLength {
     }
   }
 
-  /** When {@link LZ4FastDecompressor} was specified to the constructor,
+  /**
+   * When {@link LZ4FastDecompressor} was specified to the constructor,
    * decompresses <code>src[srcOff:]</code> into <code>dest[destOff:]</code>
    * and returns the number of bytes read from <code>src</code>, and
    * when {@link LZ4SafeDecompressor} was specified to the constructor,

@@ -122,7 +122,7 @@ public class XXHash64Test extends AbstractLZ4Test {
   }
 
   @Test
-  @Repeat(iterations=40)
+  @Repeat(iterations = 40)
   public void testInstances() {
     final int maxLenLog = randomInt(20);
     final int bufLen = randomInt(1 << maxLenLog);

@@ -104,6 +104,6 @@ public enum ByteBufferUtils {
   }
 
   public static int readShortLE(ByteBuffer buf, int i) {
-    return (buf.get(i) & 0xFF) | ((buf.get(i+1) & 0xFF) << 8);
+    return (buf.get(i) & 0xFF) | ((buf.get(i + 1) & 0xFF) << 8);
   }
 }

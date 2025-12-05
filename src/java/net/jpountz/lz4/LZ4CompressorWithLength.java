@@ -43,17 +43,17 @@ public class LZ4CompressorWithLength {
   }
 
   private void putOriginalLength(byte[] dest, int destOff, int originalLength) {
-    dest[destOff] = (byte)originalLength;
-    dest[destOff + 1] = (byte)(originalLength >> 8);
-    dest[destOff + 2] = (byte)(originalLength >> 16);
-    dest[destOff + 3] = (byte)(originalLength >> 24);
+    dest[destOff] = (byte) originalLength;
+    dest[destOff + 1] = (byte) (originalLength >> 8);
+    dest[destOff + 2] = (byte) (originalLength >> 16);
+    dest[destOff + 3] = (byte) (originalLength >> 24);
   }
 
   private void putOriginalLength(ByteBuffer dest, int destOff, int originalLength) {
-    dest.put(destOff, (byte)originalLength);
-    dest.put(destOff + 1, (byte)(originalLength >> 8));
-    dest.put(destOff + 2, (byte)(originalLength >> 16));
-    dest.put(destOff + 3, (byte)(originalLength >> 24));
+    dest.put(destOff, (byte) originalLength);
+    dest.put(destOff + 1, (byte) (originalLength >> 8));
+    dest.put(destOff + 2, (byte) (originalLength >> 16));
+    dest.put(destOff + 3, (byte) (originalLength >> 24));
   }
 
   /**
@@ -137,7 +137,7 @@ public class LZ4CompressorWithLength {
    * Compresses <code>src[srcOff:srcOff+srcLen]</code> into
    * <code>dest[destOff:destOff+maxDestLen]</code> and returns the compressed
    * length.
-   *
+   * <p>
    * This method will throw a {@link LZ4Exception} if this compressor is unable
    * to compress the input into less than <code>maxDestLen</code> bytes. To
    * prevent this exception to be thrown, you should make sure that
@@ -176,12 +176,12 @@ public class LZ4CompressorWithLength {
    * Compresses <code>src[srcOff:srcOff+srcLen]</code> into
    * <code>dest[destOff:destOff+maxDestLen]</code> and returns the compressed
    * length.
-   *
+   * <p>
    * This method will throw a {@link LZ4Exception} if this compressor is unable
    * to compress the input into less than <code>maxDestLen</code> bytes. To
    * prevent this exception to be thrown, you should make sure that
    * <code>maxDestLen &gt;= maxCompressedLength(srcLen)</code>.
-   *
+   * <p>
    * {@link ByteBuffer} positions remain unchanged.
    *
    * @param src the source data
