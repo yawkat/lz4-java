@@ -432,6 +432,7 @@
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
                       <arg value="-O3"/>
                       <arg value="-fPIC"/>
                       <arg value="-shared"/>
@@ -492,6 +493,7 @@
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
                       <arg value="-O3"/>
                       <arg value="-fPIC"/>
                       <arg value="-dynamiclib"/>
@@ -554,6 +556,7 @@
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
                       <arg value="-O3"/>
                       <arg value="-shared"/>
                       <arg line="${native.cflags}"/>

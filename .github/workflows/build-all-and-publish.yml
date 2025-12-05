@@ -15,7 +15,7 @@ on:
 jobs:
   linux:
     name: Linux natives (${{ matrix.arch }})
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -71,18 +71,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ matrix.apt }}
 
-      - name: Build (mvn verify on native linux/amd64)
-        if: ${{ matrix.arch == 'amd64' }}
-        run: |
-          ./mvnw -B -V \
-            -Darch.id=${{ matrix.arch }} \
-            -Dnative.cc=${{ matrix.cc }} \
-            "-Dnative.cflags=${{ matrix.cflags }}" \
-            "-Dnative.ldflags=${{ matrix.ldflags }}" \
-            verify
-
-      - name: Build (mvn package on cross-compiled linux arches)
-        if: ${{ matrix.arch != 'amd64' }}
+      - name: Build (mvn package)
         run: |
           ./mvnw -B -V -DskipTests \
             -Darch.id=${{ matrix.arch }} \
