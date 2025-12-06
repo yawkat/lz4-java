@@ -155,15 +155,6 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: Setup MSYS2 with Mingw-w64
-        uses: msys2/setup-msys2@v2
-        with:
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-lz4
-
       - name: Setup Zulu JDK 7
         uses: actions/setup-java@v5
         with:
@@ -176,8 +167,7 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Build (mvn verify) using MSYS2 shell
-        shell: msys2 {0}
+      - name: Build (mvn verify)
         run: |
           ./mvnw -B -V \
             -Darch.id=amd64 \
