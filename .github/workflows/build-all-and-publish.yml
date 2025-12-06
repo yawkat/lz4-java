@@ -168,6 +168,7 @@ jobs:
           cache: maven
 
       - name: Build (mvn verify)
+        shell: bash
         run: |
           ./mvnw -B -V \
             -Darch.id=amd64 \
