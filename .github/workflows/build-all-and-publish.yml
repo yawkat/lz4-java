@@ -97,11 +97,11 @@ jobs:
         include:
           - os: macos-15-intel
             arch: x86_64
-            java7: true
+            fullbuild: true
           - os: macos-14
             arch: aarch64
-            # Only build the native binary for this architecture; it suffices if only one of the macOS builds performs a full Maven build
-            java7: false
+            # Build only the native binary for this architecture; it suffices if only one of the macOS builds performs a full Maven build
+            fullbuild: false
 
     steps:
       - name: Checkout
@@ -112,7 +112,7 @@ jobs:
 
       - name: Setup Zulu JDK 7
         uses: actions/setup-java@v5
-        if: ${{ matrix.java7 }}
+        if: ${{ matrix.fullbuild }}
         with:
           distribution: zulu
           java-version: '7'
@@ -124,7 +124,7 @@ jobs:
           cache: maven
 
       - name: Build (native binary build only)
-        if: ${{ !matrix.java7 }}
+        if: ${{ !matrix.fullbuild }}
         run: |
           ./mvnw -B -V -DskipTests \
             -Darch.id=${{ matrix.arch }} \
@@ -132,7 +132,7 @@ jobs:
             process-resources
 
       - name: Build (full build)
-        if: ${{ matrix.java7 }}
+        if: ${{ matrix.fullbuild }}
         run: |
           ./mvnw -B -V \
             -Darch.id=${{ matrix.arch }} \
