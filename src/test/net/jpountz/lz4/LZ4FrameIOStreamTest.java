@@ -20,7 +20,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -37,7 +36,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.IntBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -99,18 +97,13 @@ public class LZ4FrameIOStreamTest {
 
   @Before
   public void setUp() throws IOException {
-    final int fill = 0xDEADBEEF;
     tmpFile = Files.createTempFile("lz4ioTest", ".dat").toFile();
     final Random rnd = new Random(5378L);
     int sizeRemaining = testSize;
     try (OutputStream os = Files.newOutputStream(tmpFile.toPath())) {
       while (sizeRemaining > 0) {
         final byte[] buff = new byte[Math.min(sizeRemaining, 1 << 10)];
-        final IntBuffer intBuffer = ByteBuffer.wrap(buff).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
         rnd.nextBytes(buff);
-        while (intBuffer.hasRemaining()) {
-          intBuffer.put(fill);
-        }
         os.write(buff);
         sizeRemaining -= buff.length;
       }
@@ -197,9 +190,10 @@ public class LZ4FrameIOStreamTest {
           copy(is, os);
         }
       }
-      final FileChannel channel = FileChannel.open(lz4File.toPath());
       final ByteBuffer buffer = ByteBuffer.allocate(1024).order(ByteOrder.LITTLE_ENDIAN);
-      channel.read(buffer);
+      try (FileChannel channel = FileChannel.open(lz4File.toPath())) {
+        channel.read(buffer);
+      }
       buffer.rewind();
       Assert.assertEquals(LZ4FrameOutputStream.MAGIC, buffer.getInt());
       final BitSet b = BitSet.valueOf(new byte[]{buffer.get()});
@@ -296,12 +290,7 @@ public class LZ4FrameIOStreamTest {
       }
       // Extra one byte at the tail
       try (InputStream is = new LZ4FrameInputStream(new SequenceInputStream(new FileInputStream(lz4File), new ByteArrayInputStream(new byte[1])))) {
-        is.read();
-        Assert.assertFalse(true);
-      } catch (IOException ex) {
-        // OK
-      } catch (Exception ex) {
-        Assert.assertFalse(true);
+        Assert.assertThrows(IOException.class, is::read);
       }
     } finally {
       lz4File.delete();
@@ -399,12 +388,7 @@ public class LZ4FrameIOStreamTest {
         }
       }
       try (LZ4FrameInputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
-        try {
-          is.getExpectedContentSize();
-          Assert.assertFalse(true);
-        } catch (UnsupportedOperationException e) {
-          // OK
-        }
+        Assert.assertThrows(UnsupportedOperationException.class, is::getExpectedContentSize);
         Assert.assertFalse(is.isExpectedContentSizeDefined());
         validateStreamEquals(is, tmpFile);
         validateStreamEquals(is, tmpFile);
@@ -444,7 +428,7 @@ public class LZ4FrameIOStreamTest {
       }
       cmd.add(tmpFile.getAbsolutePath());
       cmd.add(lz4File.getAbsolutePath());
-      builder.command(cmd.toArray(new String[cmd.size()]));
+      builder.command(cmd.toArray(new String[0]));
       builder.inheritIO();
       Process process = builder.start();
       int retval = process.waitFor();
@@ -479,19 +463,26 @@ public class LZ4FrameIOStreamTest {
     }
   }
 
-  private static boolean hasNativeLz4CLI() throws IOException, InterruptedException {
+  private static boolean hasNativeLz4CLI() {
+    boolean hasCli;
     try {
       ProcessBuilder checkBuilder = new ProcessBuilder().command("lz4", "-V").redirectErrorStream(true);
       Process checkProcess = checkBuilder.start();
-      return checkProcess.waitFor() == 0;
+      hasCli = checkProcess.waitFor() == 0;
     } catch (IOException | InterruptedException e) {
       // lz4 CLI not available or failed to execute; treat as unavailable to allow test skip
-      return false;
+      hasCli = false;
     }
+
+    // Check if this is running in CI (env CI=true), see https://docs.github.com/en/actions/reference/workflows-and-actions/variables#default-environment-variables
+    if (!hasCli && "true".equals(System.getenv("CI"))) {
+      Assert.fail("LZ4 CLI is not available, but should be for CI run");
+    }
+    return hasCli;
   }
 
   @Test
-  public void testNativeDecompresIfAvailable() throws IOException, InterruptedException {
+  public void testNativeDecompressIfAvailable() throws IOException, InterruptedException {
     Assume.assumeTrue(hasNativeLz4CLI());
     final File lz4File = Files.createTempFile("lz4test", ".lz4").toFile();
     final File unCompressedFile = Files.createTempFile("lz4raw", ".dat").toFile();
@@ -527,26 +518,16 @@ public class LZ4FrameIOStreamTest {
   }
 
   @Test
-  public void testEmptyLZ4Input() {
+  public void testEmptyLZ4Input() throws IOException {
     try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(new byte[0]))) {
-      is.read();
-      Assert.assertFalse(true);
-    } catch (IOException ex) {
-      // OK
-    } catch (Exception ex) {
-      Assert.assertFalse(true);
+      Assert.assertThrows(IOException.class, is::read);
     }
   }
 
   @Test
   public void testPrematureMagicNb() throws IOException {
     try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(new byte[1]))) {
-      is.read();
-      Assert.assertFalse(true);
-    } catch (IOException ex) {
-      // OK
-    } catch (Exception ex) {
-      Assert.assertFalse(true);
+      Assert.assertThrows(IOException.class, is::read);
     }
 
     final File lz4File = Files.createTempFile("lz4test", ".lz4").toFile();
@@ -559,12 +540,7 @@ public class LZ4FrameIOStreamTest {
       // Extra one byte at the tail
       try (InputStream is = new LZ4FrameInputStream(new SequenceInputStream(new FileInputStream(lz4File), new ByteArrayInputStream(new byte[1])))) {
         validateStreamEquals(is, tmpFile);
-        is.read();
-        Assert.assertFalse(true);
-      } catch (IOException ex) {
-        // OK
-      } catch (Exception ex) {
-        Assert.assertFalse(true);
+        Assert.assertThrows(IOException.class, is::read);
       }
     } finally {
       lz4File.delete();
