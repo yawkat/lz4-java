@@ -147,7 +147,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    name: Windows natives (win32/amd64)
+    name: Windows natives (windows/amd64)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -188,8 +188,8 @@ jobs:
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
-          name: natives-win32-amd64
-          path: target/classes/net/jpountz/util/win32/amd64/liblz4-java.so
+          name: natives-windows-amd64
+          path: target/classes/net/jpountz/util/windows/amd64/liblz4-java.dll
           if-no-files-found: error
 
   assemble:
@@ -244,13 +244,13 @@ jobs:
           shopt -s nullglob
           for dir in assemble/natives/*; do
             base="$(basename "$dir")"
-            # Expect names like natives-linux-amd64, natives-darwin-aarch64, natives-win32-amd64
+            # Expect names like natives-linux-amd64, natives-darwin-aarch64, natives-windows-amd64
             os="${base#natives-}"
             arch="${os#*-}"; os="${os%%-*}"
             case "$os" in
               linux) ext=so ;;
               darwin) ext=dylib ;;
-              win32) ext=so ;;
+              windows) ext=dll ;;
               *) echo "Unknown OS in artifact: $base" >&2; continue ;;
             esac
             dest="target/classes/net/jpountz/util/$os/$arch"

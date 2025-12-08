@@ -539,9 +539,8 @@
                 <phase>process-resources</phase>
                 <configuration>
                   <target>
-                    <property name="os.id" value="win32"/>
-                    <!-- Keep .so to match current Native.resourceName() -->
-                    <property name="lib.ext" value="so"/>
+                    <property name="os.id" value="windows"/>
+                    <property name="lib.ext" value="dll"/>
 
                     <!-- Arch mapping (overridable via -Darch.id) -->
                     <property name="arch.id" value="${os.arch}"/>
