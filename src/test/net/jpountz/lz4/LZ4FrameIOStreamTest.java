@@ -20,6 +20,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -115,6 +116,28 @@ public class LZ4FrameIOStreamTest {
   public void tearDown() {
     if (tmpFile != null && tmpFile.exists() && !tmpFile.delete()) {
       Assert.fail(String.format("Could not delete file [%s]", tmpFile.getAbsolutePath()));
+    }
+  }
+
+  /**
+   * Whether the native LZ4 CLI is available; can be used for comparing this library with the expected native LZ4 behavior
+   */
+  private static boolean hasLz4CLI = false;
+
+  @BeforeClass
+  public static void checkLz4CLI() {
+    try {
+      ProcessBuilder checkBuilder = new ProcessBuilder().command("lz4", "-V").redirectErrorStream(true);
+      Process checkProcess = checkBuilder.start();
+      hasLz4CLI = checkProcess.waitFor() == 0;
+    } catch (IOException | InterruptedException e) {
+      // lz4 CLI not available or failed to execute; treat as unavailable to allow test skip
+      hasLz4CLI = false;
+    }
+
+    // Check if this is running in CI (env CI=true), see https://docs.github.com/en/actions/reference/workflows-and-actions/variables#default-environment-variables
+    if (!hasLz4CLI && "true".equals(System.getenv("CI"))) {
+      Assert.fail("LZ4 CLI is not available, but should be for CI run");
     }
   }
 
@@ -411,7 +434,7 @@ public class LZ4FrameIOStreamTest {
 
   @Test
   public void testNativeCompressIfAvailable() throws IOException, InterruptedException {
-    Assume.assumeTrue(hasNativeLz4CLI());
+    Assume.assumeTrue(hasLz4CLI);
     nativeCompress();
     nativeCompress("--no-frame-crc");
   }
@@ -463,27 +486,9 @@ public class LZ4FrameIOStreamTest {
     }
   }
 
-  private static boolean hasNativeLz4CLI() {
-    boolean hasCli;
-    try {
-      ProcessBuilder checkBuilder = new ProcessBuilder().command("lz4", "-V").redirectErrorStream(true);
-      Process checkProcess = checkBuilder.start();
-      hasCli = checkProcess.waitFor() == 0;
-    } catch (IOException | InterruptedException e) {
-      // lz4 CLI not available or failed to execute; treat as unavailable to allow test skip
-      hasCli = false;
-    }
-
-    // Check if this is running in CI (env CI=true), see https://docs.github.com/en/actions/reference/workflows-and-actions/variables#default-environment-variables
-    if (!hasCli && "true".equals(System.getenv("CI"))) {
-      Assert.fail("LZ4 CLI is not available, but should be for CI run");
-    }
-    return hasCli;
-  }
-
   @Test
   public void testNativeDecompressIfAvailable() throws IOException, InterruptedException {
-    Assume.assumeTrue(hasNativeLz4CLI());
+    Assume.assumeTrue(hasLz4CLI);
     final File lz4File = Files.createTempFile("lz4test", ".lz4").toFile();
     final File unCompressedFile = Files.createTempFile("lz4raw", ".dat").toFile();
     unCompressedFile.delete();
