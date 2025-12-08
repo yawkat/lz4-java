@@ -168,6 +168,20 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # See LZ4FrameIOStreamTest
+      - name: Download LZ4 CLI for tests
+        shell: powershell
+        run: |
+          curl.exe --fail-with-body --no-progress-meter --output lz4_win64.zip --location https://github.com/lz4/lz4/releases/download/v1.10.0/lz4_win64_v1_10_0.zip
+          mkdir lz4-cli
+          tar -x -v -f lz4_win64.zip -C lz4-cli lz4.exe
+          echo "$(Get-Location)\lz4-cli" >> "$env:GITHUB_PATH"
+          rm lz4_win64.zip
+      # Separate step because the change to PATH (through GITHUB_PATH) is not visible in the step which modified it
+      # See https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-system-path
+      - name: Check LZ4 CLI
+        run: lz4 -V
+
       - name: Build (mvn verify)
         shell: bash
         run: |
