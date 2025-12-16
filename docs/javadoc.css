@@ -1,0 +1,16 @@
+#lz4-header .dropdown {
+  background: var(--navbar-background-color);
+  z-index: 9999;
+  margin: 0;
+  padding: 1em 0 0 0;
+}
+.about-language {
+  padding: 0 !important;
+  margin-top: 0 !important;
+  font-size: inherit !important;
+  height: auto !important;
+}
+#lz4-header .outdated {
+  background-color: var(--selected-background-color);
+  color: var(--selected-text-color);
+}

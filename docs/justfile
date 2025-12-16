@@ -1,0 +1,100 @@
+all_versions := `git tag --list 'v*' | tr '\n' ' '`
+latest_version := `git describe --tags --match='v*'`
+
+build := "target"
+path_javadoc := "javadoc"
+latest_version_name := "current"
+
+repo TAG:
+  rm -rf '{{build}}/repo/lz4-java-{{TAG}}'
+  if [ '{{TAG}}' = '{{latest_version_name}}' ]; then ln -s ../../.. '{{build}}/repo/lz4-java-{{TAG}}'; else git clone --shared --branch='{{TAG}}' .. '{{build}}/repo/lz4-java-{{TAG}}'; fi
+
+template NAME TAG: (repo TAG)
+  #!/usr/bin/env -S uv run --script
+  # /// script
+  # dependencies = [
+  #   "semver",
+  #   "mistune",
+  #   "pygments",
+  #   "Jinja2"
+  # ]
+  # ///
+  import semver
+  import mistune
+  import os
+  import pygments
+  import pygments.lexers
+  import pygments.formatters
+  from jinja2 import Environment, FileSystemLoader, select_autoescape
+  env = Environment(loader=FileSystemLoader("."), autoescape=True)
+
+  semantic_versions = '{{all_versions}}'.split()
+  semantic_versions.sort(reverse=True, key=lambda v: semver.VersionInfo.parse(v[1:]))
+
+  selected_version_actual = '{{TAG}}' if '{{TAG}}' != '{{latest_version_name}}' else '{{latest_version}}'
+
+  html_formatter = pygments.formatters.HtmlFormatter(lineseparator="<br>")
+  class PygmentsRenderer(mistune.HTMLRenderer):
+    def block_code(self, code, info=None):
+      if info:
+        lang = info.split(None, 1)[0]
+      else:
+        lang = None
+      if lang:
+        return pygments.highlight(code, pygments.lexers.get_lexer_by_name(lang), html_formatter)
+      else:
+        return super().block_code(code, lang)
+
+  try:
+    os.makedirs('{{build}}/templates/{{TAG}}')
+  except:
+    pass
+  with open('{{build}}/templates/{{TAG}}/{{ NAME }}', 'w') as f:
+    f.write(env.get_template("{{ NAME }}.jinja").render(
+        all_versions=semantic_versions,
+        latest_version='{{latest_version}}',
+        latest_version_name='{{latest_version_name}}',
+        selected_version='{{TAG}}',
+        selected_version_actual=selected_version_actual,
+        path_javadoc='{{path_javadoc}}',
+        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
+        pygments_style=lambda: html_formatter.get_style_defs()
+        ))
+
+#[arg('TAG', pattern='v\d+\.\d+\.\d+')]
+javadoc TAG: (template "header-javadoc.html" TAG)
+  header=$(cat '{{build}}/templates/{{TAG}}/header-javadoc.html') && cd '{{build}}/repo/lz4-java-{{TAG}}' && ./mvnw javadoc:javadoc "-Dheader=$header"
+  mkdir -p '{{build}}/site/{{TAG}}'
+  cp -rf '{{build}}/repo/lz4-java-{{TAG}}/target/site/apidocs' '{{build}}/site/{{TAG}}/{{path_javadoc}}'
+
+version TAG: (javadoc TAG) (template "index.html" TAG)
+  cp -f '{{build}}/templates/{{TAG}}/index.html' '{{build}}/site/{{TAG}}/index.html'
+
+rewrite-version-links:
+  #!/usr/bin/env -S uv run --script
+  # /// script
+  # ///
+  import pathlib
+
+  root = pathlib.Path("target/site")
+  for p in root.glob("**/*.html"):
+    to_root = root.relative_to(p.parent, walk_up=True)
+
+    html = p.read_text()
+    for v in ['{{latest_version_name}}'] + '{{all_versions}}'.split():
+      # walk up to root, enter the new version, then walk back down to same path.
+      new_parts = [*to_root.parts, v, *p.relative_to(root).parts[1:]]
+      if new_parts[-1] == 'index.html':
+        new_parts[-1] = ''
+      html = html.replace('REWRITE_PATH_' + v, str(pathlib.Path(*new_parts)))
+    if '{{path_javadoc}}' in p.relative_to(root).parts:
+      html = html.replace('</title>', '</title><link rel="stylesheet" href="' + str(to_root) + '/common.css"><link rel="stylesheet" href="' + str(to_root) + '/javadoc.css">')
+    p.write_text(html)
+
+prepare:
+  rm -rf '{{build}}/site'
+  mkdir -p '{{build}}/site'
+  ln -s ../../javadoc.css ../../common.css ../../markdown.css '{{build}}/site'
+
+all: prepare (version latest_version_name) && rewrite-version-links
+  set -e; for v in {{all_versions}}; do just 'all_versions={{all_versions}}' 'latest_version={{latest_version}}' version "$v"; done

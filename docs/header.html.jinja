@@ -1,0 +1,24 @@
+<ul id="lz4-header" class="nav-list">
+  {% if selected_version != latest_version_name and selected_version != latest_version %}
+    <li class="outdated"><span>Outdated Version!</span></li>
+  {% endif %}
+  <li><a href="{{ version_root }}">Readme</a></li>
+  <li><a href="{{ version_root }}/{{ path_javadoc }}">Javadoc</a></li>
+  <li><a href="https://github.com/yawkat/lz4-java{% if selected_version != latest_version_name %}/releases/tag/{{ selected_version_actual }}{% endif %}">GitHub</a></li>
+  <li>
+    <span>{{ selected_version }} ▼</span>
+    <ul class="dropdown">
+      {% for v in all_versions %}
+        <li>
+          {% if v == selected_version %}<span class="selected">{{ v }}</span>
+          {% else %}<a href="REWRITE_PATH_{{ v }}">{{ v }}</a>{% endif %}
+
+          {% if v == latest_version %}
+            {% if latest_version_name == selected_version %}(<span class="selected">{{ latest_version_name }}</span>)
+            {% else %}(<a href="REWRITE_PATH_{{ latest_version_name }}">{{ latest_version_name }}</a>){% endif %}
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </li>
+</ul>

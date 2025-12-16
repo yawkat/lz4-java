@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lz4-java {% if selected_version == latest_version_name %}{{ latest_version }}{% else %}{{ selected_version }}{% endif %}</title>
+  <link rel="stylesheet" href="../common.css"/>
+  <link rel="stylesheet" href="../markdown.css"/>
+  <style>{{ pygments_style() }}</style>
+</head>
+<body>
+  {% set version_root = '.' %}
+  {% include "header.html.jinja" %}
+  {{ readme()|safe }}
+</body>
+</html>

@@ -1,0 +1,17 @@
+#lz4-header .dropdown {
+  position: absolute;
+  display: none;
+  width: auto;
+  right: 0;
+}
+#lz4-header:hover .dropdown {
+  display: block;
+}
+#lz4-header .dropdown li {
+  display: block;
+  float: left;
+  clear: both;
+}
+#lz4-header .selected {
+  font-weight: bold;
+}

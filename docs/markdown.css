@@ -1,0 +1,38 @@
+#lz4-header .dropdown {
+  padding: 0;
+  margin: 0;
+  background: #ddd;
+}
+
+body {
+  max-width: 80em;
+  font-family: sans-serif;
+  display: inline-block;
+  text-align: left;
+  padding-top: 3em;
+}
+html {
+  text-align: center;
+}
+
+#lz4-header {
+  margin: 0;
+  padding: 0;
+  background: #ddd;
+  position: fixed;
+  max-width: 80em;
+  width: 100%;
+  top: 0;
+  text-align: right;
+}
+#lz4-header li {
+  display: inline-block;
+}
+#lz4-header li > span, #lz4-header li > a {
+  padding: 0.5em;
+  display: inline-block;
+}
+#lz4-header .outdated {
+  background-color: #aa0000;
+  color: #fff;
+}
