@@ -36,21 +36,20 @@ jobs:
       - name: Build documentation
         if: github.event_name != 'workflow_dispatch' || !inputs.selected_version
         run: cd docs && just all
-      - name: Upload pages artifact
-        id: deployment
-        uses: actions/upload-pages-artifact@v3
+      - name: Publish
+        uses: cloudflare/wrangler-action@v3
+        id: cf_publish
         with:
-          path: 'docs/target/site/'
-  deploy:
-    needs: build
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at
+      - name: Check PR
+        uses: 8BitJonny/gh-get-current-pr@3.0.0
+        id: pr
+      - name: Comment on PR
+        if: steps.pr.outputs.pr_found
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: ":rocket: Preview deployed to ${{steps.cf_publish.outputs.deployment-url}}"
+          comment-tag: deployment
+          pr-number: "${{steps.pr.outputs.number}}"
