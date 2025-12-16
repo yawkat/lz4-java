@@ -6,8 +6,14 @@
   <li><a href="{{ version_root }}/{{ path_javadoc }}">Javadoc</a></li>
   <li><a href="https://github.com/yawkat/lz4-java{% if selected_version != latest_version_name %}/releases/tag/{{ selected_version_actual }}{% endif %}">GitHub</a></li>
   <li>
-    <span>{{ selected_version }} ▼</span>
+    <span>{% if selected_version == latest_version_name %}{{ latest_version }} ({{ selected_version }}){% else %}{{ selected_version }}{% endif %} ▼</span>
     <ul class="dropdown">
+      {% if latest_version not in all_versions %}
+        <li>
+          {% if latest_version_name == selected_version %}<span class="selected">{{ latest_version }} (snapshot)</span>
+          {% else %}<a href="REWRITE_PATH_{{ latest_version_name }}">{{ latest_version }} (snapshot)</a>{% endif %}
+        </li>
+      {% endif %}
       {% for v in all_versions %}
         <li>
           {% if v == selected_version %}<span class="selected">{{ v }}</span>

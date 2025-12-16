@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      selected_version:
+        description: 'Tag to associate with current working tree. If unset, `git describe` is used.'
+        type: string
+        required: false
   pull_request: # TODO
 
 jobs:
@@ -25,7 +30,11 @@ jobs:
         uses: astral-sh/setup-uv@v7
       - name: Install just
         run: sudo apt install -y just
+      - name: Build documentation (explicit selected version)
+        if: github.event_name == 'workflow_dispatch' && inputs.selected_version
+        run: cd docs && just latest_version=${{ inputs.selected_version }} all
       - name: Build documentation
+        if: github.event_name != 'workflow_dispatch' || !inputs.selected_version
         run: cd docs && just all
       - name: Upload pages artifact
         id: deployment

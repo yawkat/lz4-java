@@ -97,5 +97,9 @@ prepare:
   mkdir -p '{{build}}/site'
   ln -s ../../javadoc.css ../../common.css ../../markdown.css '{{build}}/site'
 
-all: prepare (version latest_version_name) && rewrite-version-links
+log:
+  @echo "Available tags: {{all_versions}}"
+  @echo "Current tag: {{latest_version}}"
+
+all: log prepare (version latest_version_name) && rewrite-version-links
   set -e; for v in {{all_versions}}; do just 'all_versions={{all_versions}}' 'latest_version={{latest_version}}' version "$v"; done
