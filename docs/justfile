@@ -95,7 +95,7 @@ rewrite-version-links:
 prepare:
   rm -rf '{{build}}/site'
   mkdir -p '{{build}}/site'
-  ln -s ../../javadoc.css ../../common.css ../../markdown.css '{{build}}/site'
+  ln -s ../../javadoc.css ../../common.css ../../markdown.css ../../_redirects '{{build}}/site'
 
 log:
   @echo "Available tags: {{all_versions}}"
