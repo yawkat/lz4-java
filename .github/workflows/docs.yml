@@ -9,7 +9,6 @@ on:
         description: 'Tag to associate with current working tree. If unset, `git describe` is used.'
         type: string
         required: false
-  pull_request: # TODO
 
 jobs:
   build:
