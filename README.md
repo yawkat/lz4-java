@@ -147,8 +147,8 @@ Prior to 1.8.1, there was also a lz4-pure-java artifact that excluded the JNI bi
 
 # Documentation
 
- - [lz4](https://javadoc.io/doc/at.yawk.lz4/lz4-java/latest/org.lz4.java/net/jpountz/lz4/package-summary.html)
- - [xxhash](https://javadoc.io/doc/at.yawk.lz4/lz4-java/latest/org.lz4.java/net/jpountz/xxhash/package-summary.html)
+ - [lz4](https://lz4-java.yawk.at/current/javadoc/net/jpountz/lz4/package-summary.html)
+ - [xxhash](https://lz4-java.yawk.at/current/javadoc/net/jpountz/xxhash/package-summary.html)
  - [changelog (versions <= 1.8.0)](https://github.com/yawkat/lz4-java/blob/main/CHANGES.md)
  - [changelog / GitHub releases (versions >= 1.8.1)](https://github.com/yawkat/lz4-java/releases)
 
