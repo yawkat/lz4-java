@@ -183,13 +183,13 @@
               <goal>compile</goal>
             </goals>
             <configuration>
-              <source>1.7</source>
-              <target>1.7</target>
+              <source>21</source>
+              <target>21</target>
               <encoding>${project.build.sourceEncoding}</encoding>
               <debug>true</debug>
               <fork>true</fork>
               <jdkToolchain>
-                <version>7</version>
+                <version>21</version>
               </jdkToolchain>
             </configuration>
           </execution>
