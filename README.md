@@ -40,10 +40,10 @@ For LZ4 compressors, LZ4 HC compressors and decompressors, 3 implementations are
 available:
  - JNI bindings to the original C implementation by Yann Collet,
  - a pure Java port of the compression and decompression algorithms,
- - a Java port that uses the sun.misc.Unsafe API in order to achieve compression
+ - a Java port that uses the `sun.misc.Unsafe` API in order to achieve compression
    and decompression speeds close to the C implementation.
 
-Have a look at LZ4Factory for more information.
+Have a look at [LZ4Factory](https://lz4-java.yawk.at/current/javadoc/net/jpountz/lz4/LZ4Factory) for more information.
 
 ## Compatibility notes
 
@@ -107,9 +107,9 @@ score of 10) hash function.
 ## Implementations
 
 Similarly to LZ4, 3 implementations are available: JNI bindings, pure Java port
-and pure Java port that uses sun.misc.Unsafe.
+and pure Java port that uses `sun.misc.Unsafe`.
 
-Have a look at XXHashFactory for more information.
+Have a look at [XXHashFactory](https://lz4-java.yawk.at/current/javadoc/net/jpountz/xxhash/XXHashFactory) for more information.
 
 ## Compatibility notes
 
@@ -167,8 +167,8 @@ speed at which they compress/decompress/hash bytes.
 
 Make sure you have a Java 7 installation in your [Maven toolchains.xml](https://maven.apache.org/guides/mini/guide-using-toolchains.html). You may also need a C compiler.
 
-First run git submodule init and then git submodule update to initialize the lz4 submodule in src/lz4.
+First run `git submodule init` and then `git submodule update` to initialize the lz4 submodule in `src/lz4`.
 
 Then, run `./mvnw verify`.
 
-Building a full artifact with native libraries for all supported platforms is more complex. We do this through github actions.
+Building a full artifact with native libraries for all supported platforms is more complex. We do this through GitHub Actions.
