@@ -383,6 +383,9 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   @Override
   public int available() throws IOException {
+    if (!firstFrameHeaderRead) {
+      return 0;
+    }
     return buffer.remaining();
   }
 

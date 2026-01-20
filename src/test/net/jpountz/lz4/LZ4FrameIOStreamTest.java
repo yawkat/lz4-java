@@ -551,4 +551,29 @@ public class LZ4FrameIOStreamTest {
       lz4File.delete();
     }
   }
+
+  @Test
+  public void testAvailable() throws IOException {
+    final File lz4File = Files.createTempFile("lz4test", ".lz4").toFile();
+    try {
+      try (OutputStream os = new LZ4FrameOutputStream(new FileOutputStream(lz4File))) {
+        try (InputStream is = new FileInputStream(tmpFile)) {
+          copy(is, os);
+        }
+      }
+
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals("available() should be 0 before first read", 0, is.available());
+
+        if (is.read() != -1 && testSize > 1) {
+          Assert.assertTrue(
+            "After reading 1 byte, available() should report > 0 bytes ready in the buffer",
+            is.available() > 0
+          );
+        }
+      }
+    } finally {
+      lz4File.delete();
+    }
+  }
 }
