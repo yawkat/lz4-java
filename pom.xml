@@ -389,7 +389,7 @@
         </os>
       </activation>
       <properties>
-        <native.cflags>-O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection</native.cflags>
+        <native.cflags>-O2 -fno-omit-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security</native.cflags>
         <native.xxhash.cflags>${native.cflags} -fno-tree-vectorize</native.xxhash.cflags>
       </properties>
       <build>
