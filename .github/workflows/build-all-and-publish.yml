@@ -18,7 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NATIVE_BASE_CFLAGS: -O2 -fno-omit-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security
-      NATIVE_X86_EXTRA_CFLAGS: -mno-omit-leaf-frame-pointer -fcf-protection
       NATIVE_XXHASH_EXTRA_CFLAGS: -fno-tree-vectorize
     strategy:
       fail-fast: false
@@ -26,32 +25,27 @@ jobs:
         include:
           - arch: amd64
             cc: gcc
-            arch_cflags: ""
-            arch_x86_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
+            arch_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
             ldflags: ""
             apt: ""
           - arch: i386
             cc: gcc
-            arch_cflags: "-m32"
-            arch_x86_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
+            arch_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection -m32"
             ldflags: "-m32"
             apt: "gcc-multilib libc6-dev-i386"
           - arch: aarch64
             cc: aarch64-linux-gnu-gcc
             arch_cflags: ""
-            arch_x86_cflags: ""
             ldflags: ""
             apt: "gcc-aarch64-linux-gnu"
           - arch: ppc64le
             cc: powerpc64le-linux-gnu-gcc
             arch_cflags: ""
-            arch_x86_cflags: ""
             ldflags: ""
             apt: "gcc-powerpc64le-linux-gnu"
           - arch: s390x
             cc: s390x-linux-gnu-gcc
             arch_cflags: ""
-            arch_x86_cflags: ""
             ldflags: ""
             apt: "gcc-s390x-linux-gnu"
 
@@ -82,11 +76,11 @@ jobs:
 
       - name: Build (mvn package)
         run: |
-            ./mvnw -B -V -DskipTests \
+              ./mvnw -B -V -DskipTests \
               -Darch.id=${{ matrix.arch }} \
               -Dnative.cc=${{ matrix.cc }} \
-              "-Dnative.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_x86_cflags }} ${{ matrix.arch_cflags }}" \
-              "-Dnative.xxhash.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_x86_cflags }} ${{ matrix.arch_cflags }} ${{ env.NATIVE_XXHASH_EXTRA_CFLAGS }}" \
+              "-Dnative.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }}" \
+              "-Dnative.xxhash.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }} ${{ env.NATIVE_XXHASH_EXTRA_CFLAGS }}" \
               "-Dnative.ldflags=${{ matrix.ldflags }}" \
               package
 
