@@ -388,6 +388,10 @@
           <name>Linux</name>
         </os>
       </activation>
+      <properties>
+        <native.cflags>-O2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection</native.cflags>
+        <native.xxhash.cflags>${native.cflags} -fno-tree-vectorize</native.xxhash.cflags>
+      </properties>
       <build>
         <plugins>
           <plugin>
@@ -417,20 +421,75 @@
                     <!-- Toolchain overrides come from Maven properties: ${native.cc}, ${native.cflags}, ${native.ldflags} -->
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
+                    <mkdir dir="${project.build.directory}/native/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
-                      <arg value="-O3"/>
-                      <arg value="-fPIC"/>
-                      <arg value="-shared"/>
                       <arg line="${native.cflags}"/>
+                      <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
                       <arg value="-I${java.home}/include"/>
                       <arg value="-I${java.home}/include/linux"/>
+                      <arg value="-c"/>
                       <arg value="${project.basedir}/src/jni/net_jpountz_lz4_LZ4JNI.c"/>
+                      <arg value="-o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/net_jpountz_lz4_LZ4JNI.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.cflags}"/>
+                      <arg value="-fPIC"/>
+                      <arg value="-I${project.basedir}/src/lz4/lib"/>
+                      <arg value="-I${java.home}/include"/>
+                      <arg value="-I${java.home}/include/linux"/>
+                      <arg value="-c"/>
                       <arg value="${project.basedir}/src/jni/net_jpountz_xxhash_XXHashJNI.c"/>
+                      <arg value="-o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/net_jpountz_xxhash_XXHashJNI.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.cflags}"/>
+                      <arg value="-fPIC"/>
+                      <arg value="-I${project.basedir}/src/lz4/lib"/>
+                      <arg value="-I${java.home}/include"/>
+                      <arg value="-I${java.home}/include/linux"/>
+                      <arg value="-c"/>
                       <arg value="${project.basedir}/src/lz4/lib/lz4.c"/>
+                      <arg value="-o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/lz4.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.cflags}"/>
+                      <arg value="-fPIC"/>
+                      <arg value="-I${project.basedir}/src/lz4/lib"/>
+                      <arg value="-I${java.home}/include"/>
+                      <arg value="-I${java.home}/include/linux"/>
+                      <arg value="-c"/>
                       <arg value="${project.basedir}/src/lz4/lib/lz4hc.c"/>
+                      <arg value="-o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/lz4hc.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.xxhash.cflags}"/>
+                      <arg value="-fPIC"/>
+                      <arg value="-I${project.basedir}/src/lz4/lib"/>
+                      <arg value="-I${java.home}/include"/>
+                      <arg value="-I${java.home}/include/linux"/>
+                      <arg value="-c"/>
                       <arg value="${project.basedir}/src/lz4/lib/xxhash.c"/>
+                      <arg value="-o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/xxhash.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" failonerror="true">
+                      <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg value="-shared"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/net_jpountz_lz4_LZ4JNI.o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/net_jpountz_xxhash_XXHashJNI.o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/lz4.o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/lz4hc.o"/>
+                      <arg value="${project.build.directory}/native/${os.id}/${arch.id}/xxhash.o"/>
                       <arg line="${native.ldflags}"/>
                       <arg value="-o"/>
                       <arg value="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}/liblz4-java.${lib.ext}"/>
