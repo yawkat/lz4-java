@@ -27,13 +27,13 @@ jobs:
           - arch: amd64
             cc: gcc
             arch_cflags: ""
-            arch_x86_cflags: "${{ env.NATIVE_X86_EXTRA_CFLAGS }}"
+            arch_x86_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
             ldflags: ""
             apt: ""
           - arch: i386
             cc: gcc
             arch_cflags: "-m32"
-            arch_x86_cflags: "${{ env.NATIVE_X86_EXTRA_CFLAGS }}"
+            arch_x86_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
             ldflags: "-m32"
             apt: "gcc-multilib libc6-dev-i386"
           - arch: aarch64
