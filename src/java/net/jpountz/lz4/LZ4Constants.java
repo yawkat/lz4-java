@@ -22,6 +22,9 @@ enum LZ4Constants {
 
   static final int DEFAULT_COMPRESSION_LEVEL = 8 + 1;
   static final int MAX_COMPRESSION_LEVEL = 16 + 1;
+  static final int DEFAULT_ACCELERATION = 1;
+  static final int MIN_ACCELERATION = 1;
+  static final int MAX_ACCELERATION = 65537;
 
   static final int MEMORY_USAGE = 14;
   static final int NOT_COMPRESSIBLE_DETECTION_LEVEL = 6;

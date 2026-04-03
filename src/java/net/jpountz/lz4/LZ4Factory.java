@@ -26,6 +26,8 @@ import net.jpountz.util.Utils;
 
 import static net.jpountz.lz4.LZ4Constants.DEFAULT_COMPRESSION_LEVEL;
 import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_LEVEL;
+import static net.jpountz.lz4.LZ4Constants.MIN_ACCELERATION;
+import static net.jpountz.lz4.LZ4Constants.MAX_ACCELERATION;
 
 /**
  * Entry point for the LZ4 API.
@@ -320,6 +322,122 @@ public final class LZ4Factory {
   }
 
   /**
+   * Creates a new {@link LZ4JNIFastResetCompressor} with default acceleration (1).
+   * <p>
+   * This compressor pre-allocates native state once and uses
+   * {@code LZ4_compress_fast_extState_fastReset} for each compression, avoiding
+   * the expensive full state initialization that the default {@link #fastCompressor()}
+   * performs on every call.
+   * <p>
+   * Unlike {@link #fastCompressor()}, this compressor is <b>NOT</b> thread-safe and
+   * holds native resources that must be freed. Always use try-with-resources or
+   * call {@link LZ4JNIFastResetCompressor#close() close()} explicitly.
+   * <p>
+   * Only available for the native instance.
+   *
+   * @return a new fast-reset compressor
+   * @throws UnsupportedOperationException if this is not the native instance
+   * @see LZ4JNIFastResetCompressor
+   * @see #fastCompressor()
+   * @see #fastResetCompressor(int)
+   */
+  public LZ4JNIFastResetCompressor fastResetCompressor() {
+    enforceNativeInstance("fastResetCompressor");
+    return new LZ4JNIFastResetCompressor();
+  }
+
+  /**
+   * Creates a new {@link LZ4JNIFastResetCompressor} with the specified acceleration.
+   * <p>
+   * This compressor pre-allocates native state once and uses
+   * {@code LZ4_compress_fast_extState_fastReset} for each compression, avoiding
+   * the expensive full state initialization that the default {@link #fastCompressor()}
+   * performs on every call.
+   * <p>
+   * Unlike {@link #fastCompressor()}, this compressor is <b>NOT</b> thread-safe and
+   * holds native resources that must be freed. Always use try-with-resources or
+   * call {@link LZ4JNIFastResetCompressor#close() close()} explicitly.
+   * <p>
+   * Only available for the native instance.
+   *
+   * <p>Acceleration follows the upstream LZ4 contract:<ol>
+   *   <li>It should be in range [1, 65537].</li>
+   *   <li>A value lower than 1 is treated as 1.</li>
+   *   <li>A value greater than 65537 is treated as 65537.</li>
+   * </ol>
+   *
+   * @param acceleration acceleration factor (1 = default, higher = faster but less compression)
+   * @return a new fast-reset compressor
+   * @throws UnsupportedOperationException if this is not the native instance
+   * @see LZ4JNIFastResetCompressor
+   * @see #fastCompressor()
+   */
+  public LZ4JNIFastResetCompressor fastResetCompressor(int acceleration) {
+    enforceNativeInstance("fastResetCompressor");
+    if (acceleration < MIN_ACCELERATION) {
+      acceleration = MIN_ACCELERATION;
+    } else if (acceleration > MAX_ACCELERATION) {
+      acceleration = MAX_ACCELERATION;
+    }
+    return new LZ4JNIFastResetCompressor(acceleration);
+  }
+
+  /**
+   * Creates a new {@link LZ4JNIHCFastResetCompressor} with default compression level (9).
+   * <p>
+   * This compressor pre-allocates native HC state once and uses
+   * {@code LZ4_compress_HC_extStateHC_fastReset} for each compression, avoiding
+   * the expensive full state initialization that the default {@link #highCompressor()}
+   * performs on every call.
+   * <p>
+   * Unlike {@link #highCompressor()}, this compressor is <b>NOT</b> thread-safe and
+   * holds native resources that must be freed. Always use try-with-resources or
+   * call {@link LZ4JNIHCFastResetCompressor#close() close()} explicitly.
+   * <p>
+   * Only available for the native instance.
+   *
+   * @return a new HC fast-reset compressor
+   * @throws UnsupportedOperationException if this is not the native instance
+   * @see LZ4JNIHCFastResetCompressor
+   * @see #highCompressor()
+   * @see #highFastResetCompressor(int)
+   */
+  public LZ4JNIHCFastResetCompressor highFastResetCompressor() {
+    enforceNativeInstance("highFastResetCompressor");
+    return new LZ4JNIHCFastResetCompressor();
+  }
+
+  /**
+   * Creates a new {@link LZ4JNIHCFastResetCompressor} with the specified compression level.
+   * <p>
+   * This compressor pre-allocates native HC state once and uses
+   * {@code LZ4_compress_HC_extStateHC_fastReset} for each compression, avoiding
+   * the expensive full state initialization that the default {@link #highCompressor()}
+   * performs on every call.
+   * <p>
+   * Unlike {@link #highCompressor()}, this compressor is <b>NOT</b> thread-safe and
+   * holds native resources that must be freed. Always use try-with-resources or
+   * call {@link LZ4JNIHCFastResetCompressor#close() close()} explicitly.
+   * <p>
+   * Only available for the native instance.
+   *
+   * @param compressionLevel compression level (1-17, higher = better compression)
+   * @return a new HC fast-reset compressor
+   * @throws UnsupportedOperationException if this is not the native instance
+   * @see LZ4JNIHCFastResetCompressor
+   * @see #highCompressor(int)
+   */
+  public LZ4JNIHCFastResetCompressor highFastResetCompressor(int compressionLevel) {
+    enforceNativeInstance("highFastResetCompressor");
+    if (compressionLevel > MAX_COMPRESSION_LEVEL) {
+      compressionLevel = MAX_COMPRESSION_LEVEL;
+    } else if (compressionLevel < 1) {
+      compressionLevel = DEFAULT_COMPRESSION_LEVEL;
+    }
+    return new LZ4JNIHCFastResetCompressor(compressionLevel);
+  }
+
+  /**
    * Returns a {@link LZ4FastDecompressor} instance.
    * Use of this method is deprecated for the {@link #nativeInstance() native instance}.
    *
@@ -375,4 +493,10 @@ public final class LZ4Factory {
     return getClass().getSimpleName() + ":" + impl;
   }
 
+  private void enforceNativeInstance(String methodName) throws UnsupportedOperationException {
+    if (!"JNI".equals(impl)) {
+      throw new UnsupportedOperationException(
+        methodName + "() is only available for the native instance. Use LZ4Factory.nativeInstance() to get a native factory");
+    }
+  }
 }
