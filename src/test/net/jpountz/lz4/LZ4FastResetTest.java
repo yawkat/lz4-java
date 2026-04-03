@@ -116,6 +116,21 @@ public class LZ4FastResetTest extends TestCase {
     }
   }
 
+  public void testFastResetByteBufferAfterClose() {
+    ByteBuffer src = ByteBuffer.wrap(repeatedData());
+    ByteBuffer dest = ByteBuffer.allocate(LZ4Utils.maxCompressedLength(src.remaining()));
+
+    try (LZ4JNIFastResetCompressor compressor = LZ4Factory.nativeInstance().fastResetCompressor()) {
+      compressor.close();
+      try {
+        compressor.compress(src, 0, src.remaining(), dest, 0, dest.remaining());
+        fail();
+      } catch (IllegalStateException expected) {
+        // expected
+      }
+    }
+  }
+
   public void testHighFastResetByteBufferFallbackKeepsCompressionLevel() throws Exception {
     LZ4Factory factory = LZ4Factory.nativeInstance();
     ByteBuffer src = ByteBuffer.wrap(repeatedData()).asReadOnlyBuffer();

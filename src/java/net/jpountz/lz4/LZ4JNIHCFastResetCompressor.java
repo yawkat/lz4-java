@@ -32,7 +32,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * state initialization that {@link LZ4HCJNICompressor LZ4_compress_HC()} performs on every call.
  * <p>
  * Each compression call is independent, making the output identical to {@link LZ4HCJNICompressor}
- * for the same compression level.
+ * for the same compression level when operating on array-backed or direct buffers.
+ * ByteBuffer inputs that are neither array-backed nor direct fall back to the safe Java compressor.
  * <p>
  * <b>Thread Safety:</b> This class is <b>NOT</b> thread-safe. Each instance holds
  * mutable native state and must be used by only one thread at a time.
@@ -151,33 +152,7 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
     ByteBufferUtils.checkRange(src, srcOff, srcLen);
     ByteBufferUtils.checkRange(dest, destOff, maxDestLen);
 
-    if ((src.hasArray() || src.isDirect()) && (dest.hasArray() || dest.isDirect())) {
-      byte[] srcArr = null, destArr = null;
-      ByteBuffer srcBuf = null, destBuf = null;
-      if (src.hasArray()) {
-        srcArr = src.array();
-        srcOff += src.arrayOffset();
-      } else {
-        assert src.isDirect();
-        srcBuf = src;
-      }
-      if (dest.hasArray()) {
-        destArr = dest.array();
-        destOff += dest.arrayOffset();
-      } else {
-        assert dest.isDirect();
-        destBuf = dest;
-      }
-
-      final int result = LZ4JNI.LZ4_compress_HC_extStateHC_fastReset(
-        ptr, srcArr, srcBuf, srcOff, srcLen,
-        destArr, destBuf, destOff, maxDestLen, compressionLevel);
-
-      if (result <= 0) {
-        throw new LZ4Exception("maxDestLen is too small");
-      }
-      return result;
-    } else {
+    if (!hasCompatibleBacking(src) || !hasCompatibleBacking(dest)) {
       LZ4Compressor safeCompressor = safeInstance;
       if (safeCompressor == null) {
         safeCompressor = LZ4Factory.safeInstance().highCompressor(compressionLevel);
@@ -185,6 +160,31 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
       }
       return safeCompressor.compress(src, srcOff, srcLen, dest, destOff, maxDestLen);
     }
+
+    return compressNativeBuffers(ptr, src, srcOff, srcLen, dest, destOff, maxDestLen);
+  }
+
+  private int compressNativeBuffers(long ptr, ByteBuffer src, int srcOff, int srcLen,
+                                    ByteBuffer dest, int destOff, int maxDestLen) {
+    byte[] srcArr = src.hasArray() ? src.array() : null;
+    byte[] destArr = dest.hasArray() ? dest.array() : null;
+    ByteBuffer srcBuf = srcArr == null ? src : null;
+    ByteBuffer destBuf = destArr == null ? dest : null;
+    int srcBufferOff = srcOff + (srcArr != null ? src.arrayOffset() : 0);
+    int destBufferOff = destOff + (destArr != null ? dest.arrayOffset() : 0);
+
+    final int result = LZ4JNI.LZ4_compress_HC_extStateHC_fastReset(
+      ptr, srcArr, srcBuf, srcBufferOff, srcLen,
+      destArr, destBuf, destBufferOff, maxDestLen, compressionLevel);
+
+    if (result <= 0) {
+      throw new LZ4Exception("maxDestLen is too small");
+    }
+    return result;
+  }
+
+  private static boolean hasCompatibleBacking(ByteBuffer buffer) {
+    return buffer.hasArray() || buffer.isDirect();
   }
 
   /**
