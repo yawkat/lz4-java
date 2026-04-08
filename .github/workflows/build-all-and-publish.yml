@@ -48,6 +48,11 @@ jobs:
             arch_cflags: ""
             ldflags: ""
             apt: "gcc-s390x-linux-gnu"
+          - arch: riscv64
+            cc: riscv64-linux-gnu-gcc
+            arch_cflags: ""
+            ldflags: ""
+            apt: "gcc-riscv64-linux-gnu"
 
     steps:
       - name: Checkout
