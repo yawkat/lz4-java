@@ -20,7 +20,7 @@ import net.jpountz.util.ByteBufferUtils;
 import net.jpountz.util.SafeUtils;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static net.jpountz.lz4.LZ4Constants.MIN_ACCELERATION;
 import static net.jpountz.lz4.LZ4Constants.MAX_ACCELERATION;
@@ -58,7 +58,8 @@ import static net.jpountz.lz4.LZ4Constants.MAX_ACCELERATION;
  */
 public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements AutoCloseable {
 
-  private final AtomicLong statePtr;
+  private final ReentrantLock lock = new ReentrantLock();
+  private long statePtr;
   private final int acceleration;
   private LZ4Compressor safeInstance;
 
@@ -87,7 +88,7 @@ public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements Au
     if (ptr == 0) {
       throw new LZ4Exception("Failed to allocate LZ4 state");
     }
-    this.statePtr = new AtomicLong(ptr);
+    this.statePtr = ptr;
   }
 
   /**
@@ -114,21 +115,28 @@ public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements Au
    * @throws IllegalStateException if the compressor has been closed
    */
   public int compress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen) {
-    long ptr = statePtr.get();
-    if (ptr == 0) {
-      throw new IllegalStateException("Compressor has been closed");
+    if (!lock.tryLock()) {
+      throw new IllegalStateException("This compressor is not thread-safe and is already in use");
     }
-    SafeUtils.checkRange(src, srcOff, srcLen);
-    SafeUtils.checkRange(dest, destOff, maxDestLen);
 
-    final int result = LZ4JNI.LZ4_compress_fast_extState_fastReset(
-      ptr, src, null, srcOff, srcLen,
-      dest, null, destOff, maxDestLen, acceleration);
+    try {
+      if (statePtr == 0) {
+        throw new IllegalStateException("Compressor has been closed");
+      }
+      SafeUtils.checkRange(src, srcOff, srcLen);
+      SafeUtils.checkRange(dest, destOff, maxDestLen);
 
-    if (result <= 0) {
-      throw new LZ4Exception("maxDestLen is too small");
+      final int result = LZ4JNI.LZ4_compress_fast_extState_fastReset(
+        statePtr, src, null, srcOff, srcLen,
+        dest, null, destOff, maxDestLen, acceleration);
+
+      if (result <= 0) {
+        throw new LZ4Exception("maxDestLen is too small");
+      }
+      return result;
+    } finally {
+      lock.unlock();
     }
-    return result;
   }
 
   /**
@@ -150,24 +158,31 @@ public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements Au
    * @throws IllegalStateException if the compressor has been closed
    */
   public int compress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff, int maxDestLen) {
-    long ptr = statePtr.get();
-    if (ptr == 0) {
-      throw new IllegalStateException("Compressor has been closed");
+    if (!lock.tryLock()) {
+      throw new IllegalStateException("This compressor is not thread-safe and is already in use");
     }
-    ByteBufferUtils.checkNotReadOnly(dest);
-    ByteBufferUtils.checkRange(src, srcOff, srcLen);
-    ByteBufferUtils.checkRange(dest, destOff, maxDestLen);
 
-    if (!hasCompatibleBacking(src) || !hasCompatibleBacking(dest)) {
-      LZ4Compressor safeCompressor = safeInstance;
-      if (safeCompressor == null) {
-        safeCompressor = LZ4Factory.safeInstance().fastCompressor();
-        safeInstance = safeCompressor;
+    try {
+      if (statePtr == 0) {
+        throw new IllegalStateException("Compressor has been closed");
       }
-      return safeCompressor.compress(src, srcOff, srcLen, dest, destOff, maxDestLen);
-    }
+      ByteBufferUtils.checkNotReadOnly(dest);
+      ByteBufferUtils.checkRange(src, srcOff, srcLen);
+      ByteBufferUtils.checkRange(dest, destOff, maxDestLen);
 
-    return compressNativeBuffers(ptr, src, srcOff, srcLen, dest, destOff, maxDestLen);
+      if (!hasCompatibleBacking(src) || !hasCompatibleBacking(dest)) {
+        LZ4Compressor safeCompressor = safeInstance;
+        if (safeCompressor == null) {
+          safeCompressor = LZ4Factory.safeInstance().fastCompressor();
+          safeInstance = safeCompressor;
+        }
+        return safeCompressor.compress(src, srcOff, srcLen, dest, destOff, maxDestLen);
+      }
+
+      return compressNativeBuffers(statePtr, src, srcOff, srcLen, dest, destOff, maxDestLen);
+    } finally {
+      lock.unlock();
+    }
   }
 
   private int compressNativeBuffers(long ptr, ByteBuffer src, int srcOff, int srcLen,
@@ -199,7 +214,12 @@ public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements Au
    * @return true if closed
    */
   public boolean isClosed() {
-    return statePtr.get() == 0;
+    lock.lock();
+    try {
+      return statePtr == 0;
+    } finally {
+      lock.unlock();
+    }
   }
 
   /**
@@ -208,9 +228,15 @@ public final class LZ4JNIFastResetCompressor extends LZ4Compressor implements Au
    */
   @Override
   public void close() {
-    long ptr = statePtr.getAndSet(0);
-    if (ptr != 0) {
-      LZ4JNI.LZ4_freeStream(ptr);
+    lock.lock();
+    try {
+      long ptr = statePtr;
+      statePtr = 0;
+      if (ptr != 0) {
+        LZ4JNI.LZ4_freeStream(ptr);
+      }
+    } finally {
+      lock.unlock();
     }
   }
 
