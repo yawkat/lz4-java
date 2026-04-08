@@ -165,6 +165,21 @@ public class LZ4FastResetTest extends TestCase {
     }
   }
 
+  public void testHighFastResetByteBufferAfterClose() {
+    ByteBuffer src = ByteBuffer.wrap(repeatedData());
+    ByteBuffer dest = ByteBuffer.allocate(LZ4Utils.maxCompressedLength(src.remaining()));
+
+    try (LZ4JNIHCFastResetCompressor compressor = LZ4Factory.nativeInstance().highFastResetCompressor()) {
+      compressor.close();
+      try {
+        compressor.compress(src, 0, src.remaining(), dest, 0, dest.remaining());
+        fail();
+      } catch (IllegalStateException expected) {
+        // expected
+      }
+    }
+  }
+
   public void testFastResetMethodsRequireNativeFactory() {
     assertFastResetUnsupported(LZ4Factory.safeInstance());
     assertFastResetUnsupported(LZ4Factory.unsafeInstance());
