@@ -18,7 +18,6 @@ package net.jpountz.lz4;
 
 import junit.framework.TestCase;
 
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -114,21 +113,31 @@ public class LZ4FastResetTest extends TestCase {
     }
   }
 
-  public void testFastResetByteBufferFallbackUsesSafeJavaCompressor() throws Exception {
+  public void testFastResetByteBufferRoundTripWithDirectBuffers() {
     LZ4Factory factory = LZ4Factory.nativeInstance();
+    byte[] data = repeatedData();
+    ByteBuffer src = directBuffer(data);
+    ByteBuffer compressed = ByteBuffer.allocateDirect(LZ4Utils.maxCompressedLength(data.length));
+    ByteBuffer restored = ByteBuffer.allocateDirect(data.length);
+
+    try (LZ4JNIFastResetCompressor compressor = factory.fastResetCompressor(9)) {
+      int compressedLength = compressor.compress(src, 0, src.remaining(), compressed, 0, compressed.capacity());
+      int restoredLength = factory.safeDecompressor().decompress(compressed, 0, compressedLength, restored, 0, restored.capacity());
+
+      assertEquals(data.length, restoredLength);
+      assertArrayEquals(data, readBuffer(restored, restoredLength));
+    }
+  }
+
+  public void testFastResetByteBufferRejectsUnsupportedSourceBuffer() {
     ByteBuffer src = ByteBuffer.wrap(repeatedData()).asReadOnlyBuffer();
-    int maxCompressedLength = LZ4Utils.maxCompressedLength(src.remaining());
+    ByteBuffer dest = ByteBuffer.allocate(LZ4Utils.maxCompressedLength(src.remaining()));
 
-    try (LZ4JNIFastResetCompressor defaultCompressor = factory.fastResetCompressor();
-         LZ4JNIFastResetCompressor acceleratedCompressor = factory.fastResetCompressor(9)) {
-      defaultCompressor.compress(src.duplicate(), 0, src.remaining(), ByteBuffer.allocate(maxCompressedLength), 0, maxCompressedLength);
-      acceleratedCompressor.compress(src.duplicate(), 0, src.remaining(), ByteBuffer.allocate(maxCompressedLength), 0, maxCompressedLength);
-
-      Field safeInstanceField = LZ4JNIFastResetCompressor.class.getDeclaredField("safeInstance");
-      safeInstanceField.setAccessible(true);
-
-      assertSame(LZ4Factory.safeInstance().fastCompressor(), safeInstanceField.get(defaultCompressor));
-      assertSame(LZ4Factory.safeInstance().fastCompressor(), safeInstanceField.get(acceleratedCompressor));
+    try (LZ4JNIFastResetCompressor compressor = LZ4Factory.nativeInstance().fastResetCompressor()) {
+      compressor.compress(src, 0, src.remaining(), dest, 0, dest.remaining());
+      fail();
+    } catch (IllegalArgumentException expected) {
+      // expected
     }
   }
 
@@ -147,21 +156,47 @@ public class LZ4FastResetTest extends TestCase {
     }
   }
 
-  public void testHighFastResetByteBufferFallbackKeepsCompressionLevel() throws Exception {
+  public void testFastResetRepeatedCompressCallsReuseState() {
     LZ4Factory factory = LZ4Factory.nativeInstance();
+
+    try (LZ4JNIFastResetCompressor compressor = factory.fastResetCompressor(9)) {
+      assertRepeatedCompressionReuse(compressor, factory.safeDecompressor());
+    }
+  }
+
+  public void testFastResetRepeatedCompressCallsRecoverAfterFailure() {
+    LZ4Factory factory = LZ4Factory.nativeInstance();
+
+    try (LZ4JNIFastResetCompressor compressor = factory.fastResetCompressor()) {
+      assertCompressionRecoversAfterFailure(compressor, factory.safeDecompressor());
+    }
+  }
+
+  public void testHighFastResetByteBufferRoundTripWithDirectBuffers() {
+    LZ4Factory factory = LZ4Factory.nativeInstance();
+    byte[] data = repeatedData();
+    ByteBuffer src = directBuffer(data);
+    ByteBuffer compressed = ByteBuffer.allocateDirect(LZ4Utils.maxCompressedLength(data.length));
+    ByteBuffer restored = ByteBuffer.allocateDirect(data.length);
+
+    try (LZ4JNIHCFastResetCompressor compressor = factory.highFastResetCompressor(9)) {
+      int compressedLength = compressor.compress(src, 0, src.remaining(), compressed, 0, compressed.capacity());
+      int restoredLength = factory.safeDecompressor().decompress(compressed, 0, compressedLength, restored, 0, restored.capacity());
+
+      assertEquals(data.length, restoredLength);
+      assertArrayEquals(data, readBuffer(restored, restoredLength));
+    }
+  }
+
+  public void testHighFastResetByteBufferRejectsUnsupportedSourceBuffer() {
     ByteBuffer src = ByteBuffer.wrap(repeatedData()).asReadOnlyBuffer();
-    int maxCompressedLength = LZ4Utils.maxCompressedLength(src.remaining());
+    ByteBuffer dest = ByteBuffer.allocate(LZ4Utils.maxCompressedLength(src.remaining()));
 
-    try (LZ4JNIHCFastResetCompressor level1 = factory.highFastResetCompressor(1);
-         LZ4JNIHCFastResetCompressor level17 = factory.highFastResetCompressor(17)) {
-      level1.compress(src.duplicate(), 0, src.remaining(), ByteBuffer.allocate(maxCompressedLength), 0, maxCompressedLength);
-      level17.compress(src.duplicate(), 0, src.remaining(), ByteBuffer.allocate(maxCompressedLength), 0, maxCompressedLength);
-
-      Field safeInstanceField = LZ4JNIHCFastResetCompressor.class.getDeclaredField("safeInstance");
-      safeInstanceField.setAccessible(true);
-
-      assertSame(LZ4Factory.safeInstance().highCompressor(1), safeInstanceField.get(level1));
-      assertSame(LZ4Factory.safeInstance().highCompressor(17), safeInstanceField.get(level17));
+    try (LZ4JNIHCFastResetCompressor compressor = LZ4Factory.nativeInstance().highFastResetCompressor()) {
+      compressor.compress(src, 0, src.remaining(), dest, 0, dest.remaining());
+      fail();
+    } catch (IllegalArgumentException expected) {
+      // expected
     }
   }
 
@@ -180,6 +215,22 @@ public class LZ4FastResetTest extends TestCase {
     }
   }
 
+  public void testHighFastResetRepeatedCompressCallsReuseState() {
+    LZ4Factory factory = LZ4Factory.nativeInstance();
+
+    try (LZ4JNIHCFastResetCompressor compressor = factory.highFastResetCompressor(9)) {
+      assertRepeatedCompressionReuse(compressor, factory.safeDecompressor());
+    }
+  }
+
+  public void testHighFastResetRepeatedCompressCallsRecoverAfterFailure() {
+    LZ4Factory factory = LZ4Factory.nativeInstance();
+
+    try (LZ4JNIHCFastResetCompressor compressor = factory.highFastResetCompressor()) {
+      assertCompressionRecoversAfterFailure(compressor, factory.safeDecompressor());
+    }
+  }
+
   public void testFastResetMethodsRequireNativeFactory() {
     assertFastResetUnsupported(LZ4Factory.safeInstance());
     assertFastResetUnsupported(LZ4Factory.unsafeInstance());
@@ -194,16 +245,92 @@ public class LZ4FastResetTest extends TestCase {
     return data;
   }
 
-  private static void assertFastResetUnsupported(LZ4Factory factory) {
+  private static ByteBuffer directBuffer(byte[] data) {
+    ByteBuffer buffer = ByteBuffer.allocateDirect(data.length);
+    buffer.put(data);
+    buffer.flip();
+    return buffer;
+  }
+
+  private static byte[] alternateData() {
+    byte[] data = new byte[333];
+    for (int i = 0; i < data.length; ++i) {
+      data[i] = (byte) ((i * 31) ^ 0x5A);
+    }
+    return data;
+  }
+
+  private static byte[] readBuffer(ByteBuffer buffer, int length) {
+    ByteBuffer duplicate = buffer.duplicate();
+    duplicate.position(0);
+    duplicate.limit(length);
+    byte[] bytes = new byte[length];
+    duplicate.get(bytes);
+    return bytes;
+  }
+
+  private static void assertRepeatedCompressionReuse(LZ4Compressor compressor, LZ4SafeDecompressor decompressor) {
+    byte[] first = repeatedData();
+    byte[] second = alternateData();
+
+    assertArrayRoundTrip(compressor, decompressor, first);
+    assertArrayRoundTrip(compressor, decompressor, second);
+    assertDirectByteBufferRoundTrip(compressor, decompressor, second);
+    assertDirectByteBufferRoundTrip(compressor, decompressor, first);
+  }
+
+  private static void assertCompressionRecoversAfterFailure(LZ4Compressor compressor, LZ4SafeDecompressor decompressor) {
+    byte[] data = repeatedData();
+    byte[] tooSmallDest = new byte[1];
+
     try {
-      factory.fastResetCompressor();
+      compressor.compress(data, 0, data.length, tooSmallDest, 0, tooSmallDest.length);
+      fail();
+    } catch (LZ4Exception expected) {
+      // expected
+    }
+
+    assertArrayRoundTrip(compressor, decompressor, alternateData());
+    assertDirectByteBufferRoundTrip(compressor, decompressor, data);
+  }
+
+  private static void assertArrayRoundTrip(LZ4Compressor compressor, LZ4SafeDecompressor decompressor, byte[] data) {
+    byte[] compressed = new byte[compressor.maxCompressedLength(data.length)];
+    int compressedLength = compressor.compress(data, 0, data.length, compressed, 0, compressed.length);
+    byte[] restored = new byte[data.length];
+    int restoredLength = decompressor.decompress(compressed, 0, compressedLength, restored, 0);
+
+    assertEquals(data.length, restoredLength);
+    assertArrayEquals(data, restored);
+  }
+
+  private static void assertDirectByteBufferRoundTrip(LZ4Compressor compressor, LZ4SafeDecompressor decompressor, byte[] data) {
+    ByteBuffer src = directBuffer(data);
+    ByteBuffer compressed = ByteBuffer.allocateDirect(compressor.maxCompressedLength(data.length));
+    ByteBuffer restored = ByteBuffer.allocateDirect(data.length);
+
+    int srcPosition = src.position();
+    int compressedPosition = compressed.position();
+    int restoredPosition = restored.position();
+
+    int compressedLength = compressor.compress(src, 0, src.remaining(), compressed, 0, compressed.capacity());
+    int restoredLength = decompressor.decompress(compressed, 0, compressedLength, restored, 0, restored.capacity());
+
+    assertEquals(srcPosition, src.position());
+    assertEquals(compressedPosition, compressed.position());
+    assertEquals(restoredPosition, restored.position());
+    assertEquals(data.length, restoredLength);
+    assertArrayEquals(data, readBuffer(restored, restoredLength));
+  }
+
+  private static void assertFastResetUnsupported(LZ4Factory factory) {
+    try (LZ4JNIFastResetCompressor ignored = factory.fastResetCompressor()) {
       fail();
     } catch (UnsupportedOperationException expected) {
       // expected
     }
 
-    try {
-      factory.highFastResetCompressor();
+    try (LZ4JNIHCFastResetCompressor ignored = factory.highFastResetCompressor()) {
       fail();
     } catch (UnsupportedOperationException expected) {
       // expected

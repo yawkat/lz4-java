@@ -34,7 +34,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>
  * Each compression call is independent, making the output identical to {@link LZ4HCJNICompressor}
  * for the same compression level when operating on array-backed or direct buffers.
- * ByteBuffer inputs that are neither array-backed nor direct fall back to the safe Java compressor.
+ * {@link ByteBuffer} inputs must be array-backed or direct.
  * <p>
  * <b>Thread Safety:</b> This class is <b>NOT</b> thread-safe. Each instance holds
  * mutable native state and must be used by only one thread at a time. Concurrent use
@@ -66,7 +66,6 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
   private final ReentrantLock lock = new ReentrantLock();
   private long statePtr;
   private final int compressionLevel;
-  private LZ4Compressor safeInstance;
 
   /**
    * Creates a new HC fast-reset compressor with default compression level.
@@ -148,8 +147,7 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
    * Compresses {@code src[srcOff:srcOff+srcLen]} into
    * {@code dest[destOff:destOff+maxDestLen]}.
    * <p>
-   * Both buffers must be either direct or array-backed. If neither, the method
-   * falls back to the safe Java compressor.
+   * Both buffers must be either direct or array-backed.
    * {@link ByteBuffer} positions remain unchanged.
    *
    * @param src        source data
@@ -160,7 +158,8 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
    * @param maxDestLen the maximum number of bytes to write in dest
    * @return the compressed size
    * @throws LZ4Exception if maxDestLen is too small
-   * @throws IllegalStateException if the compressor has been closed
+   * @throws IllegalArgumentException if src or dest is neither array-backed nor direct
+   * @throws IllegalStateException if the compressor has been closed or is already in use
    */
   public int compress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff, int maxDestLen) {
     if (!lock.tryLock()) {
@@ -171,18 +170,11 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
       if (statePtr == 0) {
         throw new IllegalStateException(CLOSED_ERROR);
       }
+      checkByteBuffer(src);
+      checkByteBuffer(dest);
       ByteBufferUtils.checkNotReadOnly(dest);
       ByteBufferUtils.checkRange(src, srcOff, srcLen);
       ByteBufferUtils.checkRange(dest, destOff, maxDestLen);
-
-      if (!hasCompatibleBacking(src) || !hasCompatibleBacking(dest)) {
-        LZ4Compressor safeCompressor = safeInstance;
-        if (safeCompressor == null) {
-          safeCompressor = LZ4Factory.safeInstance().highCompressor(compressionLevel);
-          safeInstance = safeCompressor;
-        }
-        return safeCompressor.compress(src, srcOff, srcLen, dest, destOff, maxDestLen);
-      }
 
       return compressNativeBuffers(statePtr, src, srcOff, srcLen, dest, destOff, maxDestLen);
     } finally {
@@ -209,8 +201,10 @@ public final class LZ4JNIHCFastResetCompressor extends LZ4Compressor implements 
     return result;
   }
 
-  private static boolean hasCompatibleBacking(ByteBuffer buffer) {
-    return buffer.hasArray() || buffer.isDirect();
+  private static void checkByteBuffer(ByteBuffer buffer) {
+    if (!(buffer.hasArray() || buffer.isDirect())) {
+      throw new IllegalArgumentException(UNSUPPORTED_BUFFER_ERROR);
+    }
   }
 
   /**
