@@ -34,7 +34,7 @@ template NAME TAG: (repo TAG)
 
   selected_version_actual = '{{TAG}}' if '{{TAG}}' != '{{latest_version_name}}' else '{{latest_version}}'
 
-  html_formatter = pygments.formatters.HtmlFormatter(lineseparator="<br>")
+  html_formatter = pygments.formatters.HtmlFormatter()
   class PygmentsRenderer(mistune.HTMLRenderer):
     def block_code(self, code, info=None):
       if info:
