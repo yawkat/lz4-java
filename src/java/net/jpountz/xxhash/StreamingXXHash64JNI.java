@@ -1,5 +1,7 @@
 package net.jpountz.xxhash;
 
+import static net.jpountz.util.SafeUtils.checkRange;
+
 /*
  * Copyright 2020 Linnaea Von Lavia and the lz4-java contributors.
  *
@@ -67,6 +69,7 @@ final class StreamingXXHash64JNI extends StreamingXXHash64 {
   @Override
   public synchronized void update(byte[] bytes, int off, int len) {
     checkState();
+    checkRange(bytes, off, len);
     XXHashJNI.XXH64_update(state, bytes, off, len);
   }
 

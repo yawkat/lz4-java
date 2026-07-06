@@ -26,9 +26,9 @@ public enum ByteBufferUtils {
 
   public static void checkRange(ByteBuffer buf, int off, int len) {
     SafeUtils.checkLength(len);
-    if (len > 0) {
-      checkRange(buf, off);
-      checkRange(buf, off + len - 1);
+    // buf.capacity() intentionally performs the null check even when len is 0.
+    if (off < 0 || off > buf.capacity() - len) {
+      throw new ArrayIndexOutOfBoundsException(off);
     }
   }
 

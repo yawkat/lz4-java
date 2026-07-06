@@ -105,6 +105,22 @@ public class XXHash32Test extends AbstractLZ4Test {
   }
 
   @Test
+  public void testSafeUtilsRejectsNullEmptyRange() {
+    assertThrows(NullPointerException.class, () -> SafeUtils.checkRange(null, 0, 0));
+  }
+
+  @Test
+  public void testNativeRejectsInvalidByteArrayInput() {
+    final XXHash32 nativeHash = XXHashFactory.nativeInstance().hash32();
+    assertThrows(NullPointerException.class, () -> nativeHash.hash((byte[]) null, 0, 0, randomInt()));
+    assertThrows(ArrayIndexOutOfBoundsException.class, () -> nativeHash.hash(new byte[16], 0, Integer.MAX_VALUE, randomInt()));
+
+    final StreamingXXHash32 nativeStreamingHash = XXHashFactory.nativeInstance().newStreamingHash32(randomInt());
+    assertThrows(NullPointerException.class, () -> nativeStreamingHash.update(null, 0, 0));
+    assertThrows(ArrayIndexOutOfBoundsException.class, () -> nativeStreamingHash.update(new byte[16], 0, Integer.MAX_VALUE));
+  }
+
+  @Test
   @Repeat(iterations = 20)
   public void testAIOOBE() {
     final int seed = randomInt();
