@@ -53,7 +53,7 @@ jobs:
           command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at
       - name: Check PR
         if: github.event_name != 'release'
-        uses: 8BitJonny/gh-get-current-pr@08e737c57a3a4eb24cec6487664b243b77eb5e36 # 3.0.0
+        uses: 8BitJonny/gh-get-current-pr@4056877062a1f3b624d5d4c2bedefa9cf51435c9 # 4.0.0
         id: pr
       - name: Comment on PR
         if: steps.pr.outputs.pr_found
