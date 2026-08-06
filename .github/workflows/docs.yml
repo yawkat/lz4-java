@@ -37,7 +37,7 @@ jobs:
         run: cd docs && just all
       - name: Publish production
         if: github.event_name == 'release'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4
         id: cf_publish_production
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
           command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at --branch=main
       - name: Publish preview
         if: github.event_name != 'release'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4
         id: cf_publish_preview
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
