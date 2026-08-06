@@ -16,17 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       - name: Setup Temurin JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
       - name: Install just
         run: sudo apt install -y just
       - name: Build documentation (explicit selected version)
@@ -37,7 +37,7 @@ jobs:
         run: cd docs && just all
       - name: Publish production
         if: github.event_name == 'release'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         id: cf_publish_production
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -45,7 +45,7 @@ jobs:
           command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at --branch=main
       - name: Publish preview
         if: github.event_name != 'release'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         id: cf_publish_preview
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -53,11 +53,11 @@ jobs:
           command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at
       - name: Check PR
         if: github.event_name != 'release'
-        uses: 8BitJonny/gh-get-current-pr@3.0.0
+        uses: 8BitJonny/gh-get-current-pr@08e737c57a3a4eb24cec6487664b243b77eb5e36 # 3.0.0
         id: pr
       - name: Comment on PR
         if: steps.pr.outputs.pr_found
-        uses: thollander/actions-comment-pull-request@v3
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
         with:
           message: ":rocket: Preview deployed to ${{steps.cf_publish_preview.outputs.deployment-url}}"
           comment-tag: deployment

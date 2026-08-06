@@ -56,18 +56,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           submodules: true
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
@@ -90,7 +90,7 @@ jobs:
               package
 
       - name: Upload native library
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: natives-linux-${{ matrix.arch }}
           path: target/classes/net/jpountz/util/linux/*/liblz4-java.so
@@ -113,19 +113,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           submodules: true
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         if: ${{ matrix.fullbuild }}
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
@@ -148,7 +148,7 @@ jobs:
             verify
 
       - name: Upload native library
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: natives-darwin-${{ matrix.arch }}
           path: target/classes/net/jpountz/util/darwin/${{ matrix.arch }}/liblz4-java.dylib
@@ -159,18 +159,18 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           submodules: true
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21'
@@ -199,7 +199,7 @@ jobs:
             verify
 
       - name: Upload native library
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: natives-windows-amd64
           path: target/classes/net/jpountz/util/windows/amd64/liblz4-java.dll
@@ -211,20 +211,20 @@ jobs:
     needs: [ linux, macos, windows ]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           submodules: true
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: zulu
           java-version: '7'
 
       # with central credentials
       - name: Setup Temurin JDK 21 (publish)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         if: github.event_name == 'release' || inputs.publish
         with:
           distribution: temurin
@@ -237,7 +237,7 @@ jobs:
           server-password: CENTRAL_TOKEN_PASSWORD
       # without central credentials
       - name: Setup Temurin JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         if: github.event_name != 'release' && !inputs.publish
         with:
           distribution: temurin
@@ -245,7 +245,7 @@ jobs:
           cache: maven
 
       - name: Download natives
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: assemble/natives
       # Note: downloads all artifacts; we will merge their folder contents
@@ -297,7 +297,7 @@ jobs:
         if: github.event_name != 'release' && !inputs.publish
 
       - name: Upload final JAR
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lz4-java-all-platforms
           path: target/lz4-java-*.jar
