@@ -36,11 +36,11 @@ jobs:
         with:
           distribution: zulu
           java-version: '7'
-      - name: Setup Temurin JDK 21
+      - name: Setup Temurin JDK 25
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
       - name: Build (mvn verify)
         run: |
