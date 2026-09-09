@@ -32,12 +32,12 @@ jobs:
           fetch-depth: 0
       - name: Setup Zulu JDK 7
         if: matrix.runs-on == 'ubuntu-24.04'
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
           distribution: temurin
           java-version: '25'
