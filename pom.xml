@@ -310,6 +310,7 @@
           </execution>
         </executions>
         <configuration>
+          <outputDirectory>${project.build.directory}/site</outputDirectory>
           <release>25</release>
           <excludePackageNames>net.jpountz.util</excludePackageNames>
         </configuration>
