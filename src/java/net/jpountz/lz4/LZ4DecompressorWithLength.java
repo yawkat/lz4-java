@@ -92,7 +92,9 @@ public class LZ4DecompressorWithLength {
 
   /**
    * Creates a new decompressor to decompress data compressed by {@link LZ4CompressorWithLength}.
-   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB.
+   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB by default.
+   * This fallback can be overridden with the
+   * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength} system property.
    * Note that it is deprecated to use a JNI-binding instance of {@link LZ4FastDecompressor}.
    * Please see {@link LZ4Factory#nativeInstance()} for details.
    *
@@ -121,7 +123,9 @@ public class LZ4DecompressorWithLength {
 
   /**
    * Creates a new decompressor to decompress data compressed by {@link LZ4CompressorWithLength}.
-   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB.
+   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB by default.
+   * This fallback can be overridden with the
+   * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength} system property.
    *
    * @param safeDecompressor safe decompressor to use
    */
