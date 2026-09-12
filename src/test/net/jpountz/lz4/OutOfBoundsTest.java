@@ -130,11 +130,12 @@ public class OutOfBoundsTest {
       0 // empty LZ4 block
     };
     LZ4Exception exception = assertThrows(LZ4Exception.class, () -> decompressor.decompress(input));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 1048576 exceeds maximum compression ratio of 255 for compressed length 1",
+      exception.getMessage());
 
     Arrays.fill(input, 0, 4, (byte) 0xff); // negative decompressed length
     exception = assertThrows(LZ4Exception.class, () -> decompressor.decompress(input));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Invalid decompressed length: -1", exception.getMessage());
 
     int declaredLength = 64 * 1024 * 1024 + 1;
     byte[] defaultLimitInput = new byte[4 + (declaredLength + 254) / 255];
@@ -143,7 +144,7 @@ public class OutOfBoundsTest {
     defaultLimitInput[2] = (byte) (declaredLength >>> 16);
     defaultLimitInput[3] = (byte) (declaredLength >>> 24);
     exception = assertThrows(LZ4Exception.class, () -> decompressor.decompress(defaultLimitInput));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 67108865 exceeds configured maximum 67108864", exception.getMessage());
   }
 
   @ParameterizedTest
@@ -155,13 +156,13 @@ public class OutOfBoundsTest {
     byte[] destination = new byte[16];
     LZ4Exception exception = assertThrows(LZ4Exception.class,
       () -> decompressor.decompress(compressed, 0, destination, 1));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 16 exceeds destination length 15", exception.getMessage());
 
     ByteBuffer movingSrc = ByteBuffer.wrap(compressed);
     ByteBuffer movingDest = ByteBuffer.allocate(15);
     exception = assertThrows(LZ4Exception.class,
       () -> decompressor.decompress(movingSrc, movingDest));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 16 exceeds destination length 15", exception.getMessage());
     assertEquals(0, movingSrc.position());
     assertEquals(0, movingDest.position());
 
@@ -169,7 +170,7 @@ public class OutOfBoundsTest {
     ByteBuffer indexedDest = ByteBuffer.allocate(16);
     exception = assertThrows(LZ4Exception.class,
       () -> decompressor.decompress(indexedSrc, 0, indexedDest, 1));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 16 exceeds destination length 15", exception.getMessage());
     assertEquals(0, indexedSrc.position());
     assertEquals(0, indexedDest.position());
   }
@@ -181,7 +182,7 @@ public class OutOfBoundsTest {
     byte[] compressed = new LZ4CompressorWithLength(factory.fastCompressor()).compress(new byte[16]);
 
     LZ4Exception exception = assertThrows(LZ4Exception.class, () -> decompressor.decompress(compressed));
-    assertEquals("Invalid decompressed length", exception.getMessage());
+    assertEquals("Decompressed length 16 exceeds configured maximum 15", exception.getMessage());
 
     byte[] destination = new byte[16];
     decompressor.decompress(compressed, destination);

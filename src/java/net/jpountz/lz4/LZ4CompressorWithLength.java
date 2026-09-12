@@ -26,6 +26,12 @@ import java.util.Arrays;
  * {@link LZ4DecompressorWithLength} and is NOT compatible with any other
  * decompressors in lz4-java or any other lz4 tools.  This class deliberately
  * does not extend {@link LZ4Compressor} because they are not interchangable.
+ * Methods in {@link LZ4DecompressorWithLength} that allocate their output
+ * buffer reject decompressed lengths greater than 64 MiB by default. For large
+ * or unknown-size inputs, prefer {@link LZ4FrameOutputStream} to avoid buffering
+ * the complete input in memory. The default can be overridden with the
+ * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength}
+ * system property.
  */
 
 public class LZ4CompressorWithLength {

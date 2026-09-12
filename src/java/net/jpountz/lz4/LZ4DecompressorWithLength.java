@@ -28,13 +28,21 @@ import net.jpountz.util.SafeUtils;
  * The user does not need to specify the length of the compressed data or
  * original data because the length of the original decompressed data is
  * included in the compressed data.
+ * For large or unknown-size inputs, prefer {@link LZ4FrameInputStream} to avoid
+ * buffering the complete decompressed data in memory.
+ * The default maximum decompressed length for methods that allocate their
+ * output buffer can be overridden at class initialization with the
+ * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength}
+ * system property, specified as a number of bytes. Constructors with an
+ * explicit maximum are not affected by this property.
  */
 
 public class LZ4DecompressorWithLength {
 
   // Each LZ4 match-length extension byte adds at most 255 decompressed bytes.
   private static final int MAX_COMPRESSION_RATIO = 255;
-  private static final int DEFAULT_MAX_DECOMPRESSED_LENGTH = 64 * 1024 * 1024;
+  private static final int DEFAULT_MAX_DECOMPRESSED_LENGTH = Integer.getInteger(
+      "net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength", 64 * 1024 * 1024);
 
   private final LZ4FastDecompressor fastDecompressor;
   private final LZ4SafeDecompressor safeDecompressor;
@@ -84,7 +92,9 @@ public class LZ4DecompressorWithLength {
 
   /**
    * Creates a new decompressor to decompress data compressed by {@link LZ4CompressorWithLength}.
-   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB.
+   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB by default.
+   * This fallback can be overridden with the
+   * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength} system property.
    * Note that it is deprecated to use a JNI-binding instance of {@link LZ4FastDecompressor}.
    * Please see {@link LZ4Factory#nativeInstance()} for details.
    *
@@ -113,7 +123,9 @@ public class LZ4DecompressorWithLength {
 
   /**
    * Creates a new decompressor to decompress data compressed by {@link LZ4CompressorWithLength}.
-   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB.
+   * Methods that allocate their output buffer reject decompressed lengths greater than 64 MiB by default.
+   * This fallback can be overridden with the
+   * {@code net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength} system property.
    *
    * @param safeDecompressor safe decompressor to use
    */
@@ -137,22 +149,34 @@ public class LZ4DecompressorWithLength {
   }
 
   private void checkDecompressedLength(int decompressedLength) {
-    if (decompressedLength < 0 || decompressedLength > maxDecompressedLength) {
-      throw new LZ4Exception("Invalid decompressed length");
+    if (decompressedLength < 0) {
+      throw new LZ4Exception("Invalid decompressed length: " + decompressedLength);
+    }
+    if (decompressedLength > maxDecompressedLength) {
+      throw new LZ4Exception("Decompressed length " + decompressedLength
+          + " exceeds configured maximum " + maxDecompressedLength);
     }
   }
 
   private void checkDecompressedLength(int decompressedLength, int compressedLength) {
-    if (compressedLength < 0
-        || decompressedLength > (long) compressedLength * MAX_COMPRESSION_RATIO) {
-      throw new LZ4Exception("Invalid decompressed length");
+    if (compressedLength < 0) {
+      throw new LZ4Exception("Invalid compressed length: " + compressedLength);
+    }
+    if (decompressedLength > (long) compressedLength * MAX_COMPRESSION_RATIO) {
+      throw new LZ4Exception("Decompressed length " + decompressedLength
+          + " exceeds maximum compression ratio of " + MAX_COMPRESSION_RATIO
+          + " for compressed length " + compressedLength);
     }
     checkDecompressedLength(decompressedLength);
   }
 
   private static void checkDestinationLength(int decompressedLength, int maxDestinationLength) {
-    if (decompressedLength < 0 || decompressedLength > maxDestinationLength) {
-      throw new LZ4Exception("Invalid decompressed length");
+    if (decompressedLength < 0) {
+      throw new LZ4Exception("Invalid decompressed length: " + decompressedLength);
+    }
+    if (decompressedLength > maxDestinationLength) {
+      throw new LZ4Exception("Decompressed length " + decompressedLength
+          + " exceeds destination length " + maxDestinationLength);
     }
   }
 
