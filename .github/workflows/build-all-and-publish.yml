@@ -62,12 +62,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -119,13 +119,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         if: ${{ matrix.fullbuild }}
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -165,12 +165,12 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: zulu
           java-version: '7'
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: temurin
           java-version: '25'
@@ -217,14 +217,14 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Zulu JDK 7
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: zulu
           java-version: '7'
 
       # with central credentials
       - name: Setup Temurin JDK 25 (publish)
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         if: github.event_name == 'release' || inputs.publish
         with:
           distribution: temurin
@@ -237,7 +237,7 @@ jobs:
           server-password: CENTRAL_TOKEN_PASSWORD
       # without central credentials
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         if: github.event_name != 'release' && !inputs.publish
         with:
           distribution: temurin

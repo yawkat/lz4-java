@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Setup Temurin JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        uses: yawkat/setup-java@4fa78e3e33f61445e2aca2aee58c7d9b65bf2224 # v6
         with:
           distribution: temurin
           java-version: '25'
