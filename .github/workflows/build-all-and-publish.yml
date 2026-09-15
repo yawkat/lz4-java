@@ -70,7 +70,7 @@ jobs:
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '25.0.4+101.0.LTS'
           cache: maven
 
       - name: Install cross toolchain (if needed)
@@ -128,7 +128,7 @@ jobs:
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '25.0.4+101.0.LTS'
           cache: maven
 
       - name: Build (native binary build only)
@@ -173,7 +173,7 @@ jobs:
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '25.0.4+101.0.LTS'
           cache: maven
 
       # See LZ4FrameIOStreamTest
@@ -228,7 +228,7 @@ jobs:
         if: github.event_name == 'release' || inputs.publish
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '25.0.4+101.0.LTS'
           cache: maven
           gpg-private-key: ${{ secrets.GPG_KEY }}
           gpg-passphrase: GPG_PASSWORD
@@ -241,7 +241,7 @@ jobs:
         if: github.event_name != 'release' && !inputs.publish
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '25.0.4+101.0.LTS'
           cache: maven
 
       - name: Download natives
