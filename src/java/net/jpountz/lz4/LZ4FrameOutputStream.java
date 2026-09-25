@@ -416,9 +416,17 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
     private boolean finished = false;
 
     public FrameInfo(FLG flg, BD bd) {
+      this(flg, bd, flg.isEnabled(FLG.Bits.CONTENT_CHECKSUM) ? XXHashFactory.fastestInstance().newStreamingHash32(0) : null);
+    }
+
+    /**
+     * @param streamHash the hash to use for the content checksum, must be in its initial state. Must be non-null if
+     *                   the content checksum is enabled
+     */
+    FrameInfo(FLG flg, BD bd, StreamingXXHash32 streamHash) {
       this.flg = flg;
       this.bd = bd;
-      this.streamHash = flg.isEnabled(FLG.Bits.CONTENT_CHECKSUM) ? XXHashFactory.fastestInstance().newStreamingHash32(0) : null;
+      this.streamHash = streamHash;
     }
 
     public boolean isEnabled(FLG.Bits bit) {
