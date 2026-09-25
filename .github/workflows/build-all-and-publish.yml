@@ -80,7 +80,7 @@ jobs:
 
       - name: Build (mvn package)
         run: |
-              ./mvnw -B -V -DskipTests \
+              ./mvnw -B -C -V -DskipTests \
               -Darch.id=${{ matrix.arch }} \
               -Dnative.cc=${{ matrix.cc }} \
               "-Dnative.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }}" \
@@ -132,7 +132,7 @@ jobs:
       - name: Build (native binary build only)
         if: ${{ !matrix.fullbuild }}
         run: |
-          ./mvnw -B -V -DskipTests \
+          ./mvnw -B -C -V -DskipTests \
             -Darch.id=${{ matrix.arch }} \
             -Dnative.cc=cc \
             process-resources
@@ -140,7 +140,7 @@ jobs:
       - name: Build (full build)
         if: ${{ matrix.fullbuild }}
         run: |
-          ./mvnw -B -V \
+          ./mvnw -B -C -V \
             -Darch.id=${{ matrix.arch }} \
             -Dnative.cc=cc \
             verify
@@ -190,7 +190,7 @@ jobs:
       - name: Build (mvn verify)
         shell: bash
         run: |
-          ./mvnw -B -V \
+          ./mvnw -B -C -V \
             -Darch.id=amd64 \
             -Dnative.cc=gcc \
             verify
@@ -279,7 +279,7 @@ jobs:
 
       # with maven central
       - name: Build and deploy with Maven
-        run: ./mvnw -B -V -Pdeploy,-native-linux deploy
+        run: ./mvnw -B -C -V -Pdeploy,-native-linux deploy
         if: github.event_name == 'release' || inputs.publish
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
@@ -288,7 +288,7 @@ jobs:
 
       # without maven central
       - name: Build with Maven
-        run: ./mvnw -B -V -P-native-linux verify
+        run: ./mvnw -B -C -V -P-native-linux verify
         if: github.event_name != 'release' && !inputs.publish
 
       - name: Upload final JAR
