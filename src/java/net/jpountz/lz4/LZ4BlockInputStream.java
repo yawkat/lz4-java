@@ -244,12 +244,24 @@ public class LZ4BlockInputStream extends FilterInputStream {
   }
 
   private void refill() throws IOException {
+    // Loop rather than recurse over empty blocks so that a long run of them cannot overflow the stack
+    while (!readBlock()) {
+      // empty block with stopOnEmptyBlock == false, continue with the next block
+    }
+  }
+
+  /**
+   * Reads the next block.
+   *
+   * @return {@code false} if an empty block was read and reading should continue with the next block
+   */
+  private boolean readBlock() throws IOException {
     final int headerRead = tryReadFully(compressedBuffer, HEADER_LENGTH);
     if (headerRead != HEADER_LENGTH) {
       // Only a stream that ends exactly at a block boundary is a clean end
       if (headerRead == 0 && !stopOnEmptyBlock) {
         finished = true;
-        return;
+        return true;
       }
       throw new EOFException("Stream ended prematurely");
     }
@@ -283,11 +295,10 @@ public class LZ4BlockInputStream extends FilterInputStream {
       }
       o = 0;
       if (!stopOnEmptyBlock) {
-        refill();
-      } else {
-        finished = true;
+        return false;
       }
-      return;
+      finished = true;
+      return true;
     }
     if (buffer.length < originalLen) {
       buffer = new byte[Math.max(originalLen, buffer.length * 3 / 2)];
@@ -326,6 +337,7 @@ public class LZ4BlockInputStream extends FilterInputStream {
       throw new IOException("Stream is corrupted");
     }
     o = 0;
+    return true;
   }
 
   // Like readFully(), except it signals incomplete reads by returning

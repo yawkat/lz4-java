@@ -554,4 +554,76 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     assertArrayEquals(expectedCompressedGtOriginal, in.readAllBytes());
     in.close();
   }
+
+  // Many empty blocks followed by a regular stream, as could be produced by a malicious peer
+  private static byte[] emptyBlocksFollowedBy(int emptyBlocks, byte[] tail) {
+    final byte[] emptyBlock = new byte[LZ4BlockOutputStream.HEADER_LENGTH];
+    System.arraycopy(LZ4BlockOutputStream.MAGIC, 0, emptyBlock, 0, LZ4BlockOutputStream.MAGIC_LENGTH);
+    emptyBlock[LZ4BlockOutputStream.MAGIC_LENGTH] = (byte) LZ4BlockOutputStream.COMPRESSION_METHOD_RAW;
+    final byte[] result = new byte[emptyBlocks * emptyBlock.length + tail.length];
+    for (int i = 0; i < emptyBlocks; ++i) {
+      System.arraycopy(emptyBlock, 0, result, i * emptyBlock.length, emptyBlock.length);
+    }
+    System.arraycopy(tail, 0, result, emptyBlocks * emptyBlock.length, tail.length);
+    return result;
+  }
+
+  private static byte[] compressBlockStream(byte[] data) throws IOException {
+    final ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (LZ4BlockOutputStream os = new LZ4BlockOutputStream(out)) {
+      os.write(data);
+    }
+    return out.toByteArray();
+  }
+
+  @Test
+  public void testManyEmptyBlocksRead() throws IOException {
+    final byte[] data = randomArray(64, 256);
+    final byte[] bytes = emptyBlocksFollowedBy(1_000_000, compressBlockStream(data));
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(bytes));
+    final byte[] actual = new byte[data.length];
+    assertEquals(data.length, readFully(in, actual));
+    assertArrayEquals(data, actual);
+    assertEquals(-1, in.read());
+    in.close();
+  }
+
+  @Test
+  public void testManyEmptyBlocksSkip() throws IOException {
+    final byte[] data = randomArray(64, 256);
+    final byte[] bytes = emptyBlocksFollowedBy(1_000_000, compressBlockStream(data));
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(bytes));
+    assertEquals(data.length, in.skip(Long.MAX_VALUE));
+    assertEquals(0, in.skip(Long.MAX_VALUE));
+    assertEquals(-1, in.read());
+    in.close();
+  }
+
+  @Test
+  public void testAvailableAfterEmptyBlock() throws IOException {
+    final byte[] data = randomArray(64, 256);
+    final byte[] bytes = compressBlockStream(data);
+
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(bytes));
+    final byte[] actual = new byte[data.length];
+    assertEquals(data.length, readFully(in, actual));
+    assertArrayEquals(data, actual);
+    assertEquals(0, in.available());
+    // reads the terminating empty block
+    assertEquals(-1, in.read());
+    assertEquals(0, in.available());
+    in.close();
+
+    in = lz4BlockInputStreamBuilder()
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(bytes));
+    assertEquals(data.length, readFully(in, actual));
+    assertEquals(-1, in.read());
+    assertEquals(0, in.available());
+    in.close();
+  }
 }
