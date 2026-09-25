@@ -180,13 +180,22 @@ public class LZ4DecompressorWithLength {
     }
   }
 
+  private static int checkWritten(int written, int declared) {
+    if (written != declared) {
+      throw new LZ4Exception("Decompressed " + written
+          + " bytes, but length prefix declared " + declared);
+    }
+    return written;
+  }
+
   /**
    * Convenience method, equivalent to calling
    * {@link #decompress(byte[], int, byte[], int) decompress(src, 0, dest, 0)}.
    *
    * @param src the compressed data
    * @param dest the destination buffer to store the decompressed data
-   * @return the number of bytes read to restore the original input
+   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes, which always equals the declared decompressed length (when {@link LZ4SafeDecompressor} is used)
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared decompressed length
    */
   public int decompress(byte[] src, byte[] dest) {
     return decompress(src, 0, dest, 0);
@@ -204,7 +213,8 @@ public class LZ4DecompressorWithLength {
    * @param srcOff the start offset in src
    * @param dest the destination buffer to store the decompressed data
    * @param destOff the start offset in dest
-   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes (when  {@link LZ4SafeDecompressor} is used)
+   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes, which always equals the declared decompressed length (when {@link LZ4SafeDecompressor} is used)
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared decompressed length
    */
   public int decompress(byte[] src, int srcOff, byte[] dest, int destOff) {
     if (safeDecompressor != null) {
@@ -229,7 +239,8 @@ public class LZ4DecompressorWithLength {
    * @param srcLen the exact size of the compressed data (ignored when {@link LZ4FastDecompressor} is used)
    * @param dest the destination buffer to store the decompressed data
    * @param destOff the start offset in dest
-   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes (when  {@link LZ4SafeDecompressor} is used)
+   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes, which always equals the declared decompressed length (when {@link LZ4SafeDecompressor} is used)
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared decompressed length
    */
   public int decompress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff) {
     if (safeDecompressor == null) {
@@ -238,7 +249,7 @@ public class LZ4DecompressorWithLength {
     final int destLen = getDecompressedLength(src, srcOff);
     SafeUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.length - destOff);
-    return safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, dest, destOff, destLen);
+    return checkWritten(safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, dest, destOff, destLen), destLen);
   }
 
   /**
@@ -247,7 +258,8 @@ public class LZ4DecompressorWithLength {
    *
    * @param src the compressed data
    * @return the decompressed data
-   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum
+   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum,
+   *     or if the compressed data does not decompress to exactly the declared decompressed length
    */
   public byte[] decompress(byte[] src) {
     return decompress(src, 0);
@@ -265,7 +277,8 @@ public class LZ4DecompressorWithLength {
    * @param src the compressed data
    * @param srcOff the start offset in src
    * @return the decompressed data
-   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum
+   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum,
+   *     or if the compressed data does not decompress to exactly the declared decompressed length
    */
   public byte[] decompress(byte[] src, int srcOff) {
     if (safeDecompressor != null) {
@@ -289,7 +302,8 @@ public class LZ4DecompressorWithLength {
    * @param srcOff the start offset in src
    * @param srcLen the exact size of the compressed data (ignored when {@link LZ4FastDecompressor} is used)
    * @return the decompressed data
-   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum
+   * @throws LZ4Exception if the declared decompressed length is invalid or exceeds the configured maximum,
+   *     or if the compressed data does not decompress to exactly the declared decompressed length
    */
   public byte[] decompress(byte[] src, int srcOff, int srcLen) {
     if (safeDecompressor == null) {
@@ -298,7 +312,9 @@ public class LZ4DecompressorWithLength {
     SafeUtils.checkRange(src, srcOff, srcLen);
     final int destLen = getDecompressedLength(src, srcOff);
     checkDecompressedLength(destLen, srcLen - 4);
-    return safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, destLen);
+    final byte[] dest = new byte[destLen];
+    checkWritten(safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, dest, 0, destLen), destLen);
+    return dest;
   }
 
   /**
@@ -309,6 +325,9 @@ public class LZ4DecompressorWithLength {
    *
    * @param src the compressed data
    * @param dest the destination buffer to store the decompressed data
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared
+   *     decompressed length; the positions of the buffers are then left unchanged, but the content
+   *     of <code>dest</code> after its position may have been partially overwritten
    */
   public void decompress(ByteBuffer src, ByteBuffer dest) {
     final int destLen = getDecompressedLength(src, src.position());
@@ -318,9 +337,9 @@ public class LZ4DecompressorWithLength {
       src.position(src.position() + 4 + read);
       dest.position(dest.position() + destLen);
     } else {
-      final int written = safeDecompressor.decompress(src, src.position() + 4, src.remaining() - 4, dest, dest.position(), destLen);
+      checkWritten(safeDecompressor.decompress(src, src.position() + 4, src.remaining() - 4, dest, dest.position(), destLen), destLen);
       src.position(src.limit());
-      dest.position(dest.position() + written);
+      dest.position(dest.position() + destLen);
     }
   }
 
@@ -337,7 +356,8 @@ public class LZ4DecompressorWithLength {
    * @param srcOff the start offset in src
    * @param dest the destination buffer to store the decompressed data
    * @param destOff the start offset in dest
-   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes (when  {@link LZ4SafeDecompressor} is used)
+   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes, which always equals the declared decompressed length (when {@link LZ4SafeDecompressor} is used)
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared decompressed length
    */
   public int decompress(ByteBuffer src, int srcOff, ByteBuffer dest, int destOff) {
     if (safeDecompressor != null) {
@@ -363,7 +383,8 @@ public class LZ4DecompressorWithLength {
    * @param srcLen the exact size of the compressed data (ignored when {@link LZ4FastDecompressor} is used)
    * @param dest the destination buffer to store the decompressed data
    * @param destOff the start offset in dest
-   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes (when  {@link LZ4SafeDecompressor} is used)
+   * @return the number of bytes read to restore the original input (when {@link LZ4FastDecompressor} is used), or the number of decompressed bytes, which always equals the declared decompressed length (when {@link LZ4SafeDecompressor} is used)
+   * @throws LZ4Exception if the compressed data is malformed or does not decompress to exactly the declared decompressed length
    */
   public int decompress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff) {
     if (safeDecompressor == null) {
@@ -372,6 +393,6 @@ public class LZ4DecompressorWithLength {
     final int destLen = getDecompressedLength(src, srcOff);
     ByteBufferUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.capacity() - destOff);
-    return safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, dest, destOff, destLen);
+    return checkWritten(safeDecompressor.decompress(src, srcOff + 4, srcLen - 4, dest, destOff, destLen), destLen);
   }
 }
