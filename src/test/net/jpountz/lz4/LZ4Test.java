@@ -412,6 +412,72 @@ public class LZ4Test extends AbstractLZ4Test {
   }
 
   @Test
+  public void testDecompressorWithLengthRejectsShortOutput() {
+    final byte[] data = new byte[16];
+    for (int i = 0; i < data.length; ++i) {
+      data[i] = (byte) i;
+    }
+    final byte[] compressed = new LZ4CompressorWithLength(COMPRESSORS[0]).compress(data);
+    // rewrite the little-endian length prefix to declare more bytes than the data holds
+    compressed[0] = 20;
+    compressed[1] = compressed[2] = compressed[3] = 0;
+    assertEquals(20, LZ4DecompressorWithLength.getDecompressedLength(compressed));
+
+    for (LZ4SafeDecompressor safeDecompressor : SAFE_DECOMPRESSORS) {
+      final LZ4DecompressorWithLength decompressor = new LZ4DecompressorWithLength(safeDecompressor);
+      try {
+        decompressor.decompress(compressed);
+        fail();
+      } catch (LZ4Exception e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+      }
+      try {
+        decompressor.decompress(compressed, 0, compressed.length);
+        fail();
+      } catch (LZ4Exception e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+      }
+      try {
+        decompressor.decompress(compressed, new byte[20]);
+        fail();
+      } catch (LZ4Exception e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+      }
+      try {
+        decompressor.decompress(compressed, 0, compressed.length, new byte[20], 0);
+        fail();
+      } catch (LZ4Exception e) {
+        assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+      }
+      for (boolean direct : new boolean[] {false, true}) {
+        final ByteBuffer src = direct ? ByteBuffer.allocateDirect(compressed.length) : ByteBuffer.allocate(compressed.length);
+        src.put(compressed).flip();
+        final ByteBuffer dest = direct ? ByteBuffer.allocateDirect(20) : ByteBuffer.allocate(20);
+        try {
+          decompressor.decompress(src, 0, dest, 0);
+          fail();
+        } catch (LZ4Exception e) {
+          assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+        }
+        try {
+          decompressor.decompress(src, 0, compressed.length, dest, 0);
+          fail();
+        } catch (LZ4Exception e) {
+          assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+        }
+        try {
+          decompressor.decompress(src, dest);
+          fail();
+        } catch (LZ4Exception e) {
+          assertTrue(e.getMessage(), e.getMessage().contains("length prefix declared"));
+        }
+        assertEquals(0, src.position());
+        assertEquals(0, dest.position());
+      }
+    }
+  }
+
+  @Test
   @Repeat(iterations = 5)
   public void testAllEqual() {
     final int len = randomBoolean() ? randomInt(20) : randomInt(100000);
