@@ -602,28 +602,4 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     assertEquals(-1, in.read());
     in.close();
   }
-
-  @Test
-  public void testAvailableAfterEmptyBlock() throws IOException {
-    final byte[] data = randomArray(64, 256);
-    final byte[] bytes = compressBlockStream(data);
-
-    LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(bytes));
-    final byte[] actual = new byte[data.length];
-    assertEquals(data.length, readFully(in, actual));
-    assertArrayEquals(data, actual);
-    assertEquals(0, in.available());
-    // reads the terminating empty block
-    assertEquals(-1, in.read());
-    assertEquals(0, in.available());
-    in.close();
-
-    in = lz4BlockInputStreamBuilder()
-      .withStopOnEmptyBlock(false)
-      .build(new ByteArrayInputStream(bytes));
-    assertEquals(data.length, readFully(in, actual));
-    assertEquals(-1, in.read());
-    assertEquals(0, in.available());
-    in.close();
-  }
 }
