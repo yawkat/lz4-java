@@ -183,6 +183,14 @@ Security fixes are published as [GitHub security advisories](https://github.com/
 and noted in the [release notes](https://github.com/yawkat/lz4-java/releases). Please report vulnerabilities privately
 through GitHub's [vulnerability reporting](https://github.com/yawkat/lz4-java/security/advisories/new).
 
+## Feedback and contributing
+
+- Report bugs and request features through [GitHub issues](https://github.com/yawkat/lz4-java/issues).
+- Ask questions in [GitHub Discussions](https://github.com/yawkat/lz4-java/discussions).
+- Pull requests are welcome. See
+  [CONTRIBUTING.md](https://github.com/yawkat/lz4-java/blob/main/CONTRIBUTING.md) for the requirements for
+  contributions.
+
 ## Documentation
 
 - Javadoc: [lz4](https://lz4-java.yawk.at/current/javadoc/net/jpountz/lz4/package-summary.html),
