@@ -61,7 +61,7 @@ template NAME TAG: (repo TAG)
         selected_version='{{TAG}}',
         selected_version_actual=selected_version_actual,
         path_javadoc='{{path_javadoc}}',
-        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
+        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer(), plugins=['table'])(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
         pygments_style=lambda: html_formatter.get_style_defs()
         ))
 
