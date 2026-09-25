@@ -31,6 +31,18 @@ import net.jpountz.xxhash.XXHashFactory;
  * This class uses its own format and is not compatible with the LZ4 Frame format.
  * For interoperability with other LZ4 tools, use {@link LZ4FrameOutputStream},
  * which is compatible with the LZ4 Frame format. This class remains for backward compatibility.
+ * <p>
+ * Each block starts with a header made of the magic bytes {@code "LZ4Block"},
+ * a token byte, the compressed length, the decompressed length and a checksum
+ * of the decompressed data (all three as 32-bit little-endian integers),
+ * followed by the block data. The high nibble of the token is the compression
+ * method ({@code 0x10} for raw, {@code 0x20} for LZ4) and the low nibble is the
+ * block size exponent, {@code max(0, ceil(log2(blockSize)) - 10)}. When the
+ * default checksum is used, the checksum field is the XXHash32 (seed
+ * {@code 0x9747b28c}) of the uncompressed block, masked to its low 28 bits
+ * (see {@link StreamingXXHash32#asChecksum()}). The exception is the
+ * end-of-stream block written by {@link #finish()}, which is a raw block whose
+ * lengths and checksum are all {@code 0}.
  * @see LZ4BlockInputStream
  * @see LZ4FrameOutputStream
  */
@@ -44,7 +56,7 @@ public class LZ4BlockOutputStream extends FilterOutputStream {
       + 1          // token
       + 4          // compressed length
       + 4          // decompressed length
-      + 4;         // checksum
+      + 4;         // checksum (default: XXHash32 of the uncompressed data, masked to 28 bits)
 
   static final int COMPRESSION_LEVEL_BASE = 10;
   static final int MIN_BLOCK_SIZE = 64;

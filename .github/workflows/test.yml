@@ -2,7 +2,9 @@ name: Run tests
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -52,7 +54,7 @@ jobs:
           else
             arch_id=$(uname -m)
           fi
-          ./mvnw -B -ntp -V \
+          ./mvnw -B -C -ntp -V \
             -Darch.id=${arch_id} \
             -Dnative.cc=gcc \
             -Dsurefire.reportFormat=plain \
