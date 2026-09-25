@@ -59,7 +59,10 @@ public class LZ4FrameInputStream extends FilterInputStream {
   private int maxBlockSize = -1;
   private long expectedContentSize = -1L;
   private long totalContentSize = 0L;
+  // true once a non-skippable frame header was read; buffer and frameInfo are non-null from then on
   private boolean firstFrameHeaderRead = false;
+  // true once any frame (skippable or not) was read; EOF is clean from then on
+  private boolean anyFrameRead = false;
 
   private LZ4FrameOutputStream.FrameInfo frameInfo = null;
 
@@ -138,7 +141,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
       do {
         final int mySize = in.read(readNumberBuff.array(), size, LZ4FrameOutputStream.INTEGER_BYTES - size);
         if (mySize < 0) {
-          if (firstFrameHeaderRead) {
+          if (anyFrameRead) {
             if (size > 0) {
               throw new IOException(PREMATURE_EOS);
             } else {
@@ -172,7 +175,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
       }
       skipSize -= mySize;
     }
-    firstFrameHeaderRead = true;
+    anyFrameRead = true;
   }
 
   /**
@@ -224,6 +227,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
     buffer = ByteBuffer.wrap(rawBuffer);
     buffer.limit(0);
     firstFrameHeaderRead = true;
+    anyFrameRead = true;
   }
 
   private final ByteBuffer readNumberBuff = ByteBuffer.allocate(LZ4FrameOutputStream.LONG_BYTES).order(ByteOrder.LITTLE_ENDIAN);
