@@ -95,6 +95,14 @@ public abstract class StreamingXXHash32 implements Closeable {
   /**
    * Returns a {@link Checksum} view of this instance. Modifications to the view
    * will modify this instance too and vice-versa.
+   * <p>
+   * Note that {@link Checksum#getValue()} on the returned view only returns
+   * the low 28 bits of the hash ({@code getValue() & 0x0FFFFFFF}). This is kept
+   * for compatibility with the format of
+   * {@link net.jpountz.lz4.LZ4BlockOutputStream} and
+   * {@link net.jpountz.lz4.LZ4BlockInputStream}, which use this view as their
+   * default checksum. Use {@link #getValue()} to get the full 32-bit hash
+   * ({@code getValue() & 0xFFFFFFFFL} gives it as an unsigned value).
    *
    * @return the {@link Checksum} object representing this instance
    */
@@ -103,7 +111,7 @@ public abstract class StreamingXXHash32 implements Closeable {
 
       @Override
       public long getValue() {
-        return StreamingXXHash32.this.getValue() & 0xFFFFFFFL;
+        return StreamingXXHash32.this.getValue() & 0x0FFFFFFFL;
       }
 
       @Override

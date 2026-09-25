@@ -71,7 +71,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       - name: Install cross toolchain (if needed)
         if: ${{ matrix.apt != '' }}
@@ -81,7 +80,7 @@ jobs:
 
       - name: Build (mvn package)
         run: |
-              ./mvnw -B -V -DskipTests \
+              ./mvnw -B -C -V -DskipTests \
               -Darch.id=${{ matrix.arch }} \
               -Dnative.cc=${{ matrix.cc }} \
               "-Dnative.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }}" \
@@ -130,7 +129,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       # See LZ4FrameIOStreamTest
       - name: Install LZ4 CLI for tests
@@ -140,7 +138,7 @@ jobs:
 
       - name: Build (mvn verify)
         run: |
-          ./mvnw -B -V \
+          ./mvnw -B -C -V \
             -Darch.id=${{ matrix.arch }} \
             -Dnative.cc=cc \
             ${{ matrix.maven-flags }} \
@@ -173,13 +171,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       # See LZ4FrameIOStreamTest
       - name: Download LZ4 CLI for tests
         shell: powershell
         run: |
           curl.exe --fail-with-body --no-progress-meter --output lz4_win64.zip --location https://github.com/lz4/lz4/releases/download/v1.10.0/lz4_win64_v1_10_0.zip
+          # SHA-256 of the zip above; must be updated when the lz4 version changes
+          $expected = '8cb562a53189dfc8a53ec12469b91f1b51a5075036061a86b55738183bf4ab74'
+          $actual = (Get-FileHash lz4_win64.zip -Algorithm SHA256).Hash
+          if ($actual -ne $expected) { throw "lz4_win64.zip SHA-256 mismatch: expected $expected, got $actual" }
           mkdir lz4-cli
           tar -x -v -f lz4_win64.zip -C lz4-cli lz4.exe
           echo "$(Get-Location)\lz4-cli" >> "$env:GITHUB_PATH"
@@ -192,7 +193,7 @@ jobs:
       - name: Build (mvn verify)
         shell: bash
         run: |
-          ./mvnw -B -V \
+          ./mvnw -B -C -V \
             -Darch.id=amd64 \
             -Dnative.cc=gcc \
             verify
@@ -228,7 +229,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
           gpg-private-key: ${{ secrets.GPG_KEY }}
           gpg-passphrase: GPG_PASSWORD
           server-id: 'central'
@@ -241,7 +241,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       - name: Download natives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -323,7 +322,7 @@ jobs:
 
       # with maven central
       - name: Build and deploy with Maven
-        run: ./mvnw -B -V -Pdeploy,-native-linux deploy
+        run: ./mvnw -B -C -V -Pdeploy,-native-linux deploy
         if: github.event_name == 'release' || inputs.publish
         env:
           CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
@@ -332,7 +331,7 @@ jobs:
 
       # without maven central
       - name: Build with Maven
-        run: ./mvnw -B -V -P-native-linux verify
+        run: ./mvnw -B -C -V -P-native-linux verify
         if: github.event_name != 'release' && !inputs.publish
 
       - name: Upload final JAR

@@ -309,7 +309,30 @@ public class LZ4FrameIOStreamTest {
         fos.write(skipBuffer.array());
       }
       try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(0, is.available());
         Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(-1, is.read(new byte[1]));
+      }
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(-1, is.read(new byte[1]));
+        Assert.assertEquals(-1, is.read(new byte[1]));
+      }
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(0, is.skip(1));
+      }
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File), true)) {
+        Assert.assertFalse(is.isExpectedContentSizeDefined());
+        Assert.assertEquals(-1L, is.getExpectedContentSize());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertFalse(is.isExpectedContentSizeDefined());
+        Assert.assertEquals(-1L, is.getExpectedContentSize());
       }
       // Extra one byte at the tail
       try (InputStream is = new LZ4FrameInputStream(new SequenceInputStream(new FileInputStream(lz4File), new ByteArrayInputStream(new byte[1])))) {
@@ -317,6 +340,124 @@ public class LZ4FrameIOStreamTest {
       }
     } finally {
       lz4File.delete();
+    }
+  }
+
+  /**
+   * Stream consisting of a skippable frame header, a synthetic payload of the given length that
+   * is generated on the fly (starting with the LZ4 frame magic, zeros otherwise), and a trailer.
+   */
+  private static final class SyntheticSkippableFrameStream extends InputStream {
+    private final byte[] header;
+    private final byte[] payloadPrefix;
+    private final long payloadSize;
+    private final byte[] trailer;
+    private long pos;
+
+    SyntheticSkippableFrameStream(long declaredSize, long payloadSize, byte[] trailer) {
+      this.header = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+          .putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE)
+          .putInt((int) declaredSize)
+          .array();
+      this.payloadPrefix = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+          .putInt(LZ4FrameOutputStream.MAGIC)
+          .array();
+      this.payloadSize = payloadSize;
+      this.trailer = trailer;
+    }
+
+    long remaining() {
+      return header.length + payloadSize + trailer.length - pos;
+    }
+
+    @Override
+    public int read() throws IOException {
+      final byte[] b = new byte[1];
+      return read(b, 0, 1) == -1 ? -1 : b[0] & 0xFF;
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) {
+      if (len == 0) {
+        return 0;
+      }
+      final long payloadEnd = header.length + payloadSize;
+      final int n;
+      if (pos < header.length) {
+        n = (int) Math.min(len, header.length - pos);
+        System.arraycopy(header, (int) pos, b, off, n);
+      } else if (pos < payloadEnd) {
+        final long payloadPos = pos - header.length;
+        n = (int) Math.min(len, payloadEnd - pos);
+        Arrays.fill(b, off, off + n, (byte) 0);
+        for (int i = 0; i < n && payloadPos + i < payloadPrefix.length; i++) {
+          b[off + i] = payloadPrefix[(int) payloadPos + i];
+        }
+      } else if (pos < payloadEnd + trailer.length) {
+        n = (int) Math.min(len, payloadEnd + trailer.length - pos);
+        System.arraycopy(trailer, (int) (pos - payloadEnd), b, off, n);
+      } else {
+        return -1;
+      }
+      pos += n;
+      return n;
+    }
+  }
+
+  @Test
+  public void testLargeSkippableFrame() throws IOException {
+    // Skipping several GiB is slow-ish, only run this once
+    Assume.assumeTrue(testSize == 1 << 10);
+    final ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+    try (OutputStream os = new LZ4FrameOutputStream(compressed)) {
+      try (InputStream is = new FileInputStream(tmpFile)) {
+        copy(is, os);
+      }
+    }
+    // Skippable frame size >= 2^31, which does not fit in a signed int
+    final long skipSize = 0x80000000L;
+    try (InputStream is = new LZ4FrameInputStream(new SyntheticSkippableFrameStream(skipSize, skipSize, compressed.toByteArray()))) {
+      validateStreamEquals(is, tmpFile);
+      Assert.assertEquals(-1, is.read());
+    }
+    // Maximum skippable frame size
+    final long maxSkipSize = 0xFFFFFFFFL;
+    try (InputStream is = new LZ4FrameInputStream(new SyntheticSkippableFrameStream(maxSkipSize, maxSkipSize, compressed.toByteArray()))) {
+      validateStreamEquals(is, tmpFile);
+      Assert.assertEquals(-1, is.read());
+    }
+  }
+
+  @Test
+  public void testTruncatedLargeSkippableFrame() throws IOException {
+    // Skippable frame size >= 2^31, but the stream ends early: the skip must consume all that is available
+    final SyntheticSkippableFrameStream truncated = new SyntheticSkippableFrameStream(0x80000000L, 64, new byte[0]);
+    try (InputStream is = new LZ4FrameInputStream(truncated)) {
+      final IOException e = Assert.assertThrows(IOException.class, is::read);
+      Assert.assertEquals(LZ4FrameInputStream.PREMATURE_EOS, e.getMessage());
+      Assert.assertEquals(0, truncated.remaining());
+    }
+  }
+
+  @Test
+  public void testEmptySkippableFrameOnly() throws IOException {
+    final ByteBuffer frame = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+    frame.putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE);
+    frame.putInt(0);
+    for (boolean readSingleFrame : new boolean[] {false, true}) {
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame.array()), readSingleFrame)) {
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read(new byte[1]));
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(0, is.available());
+      }
+    }
+    try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame.array()), true)) {
+      Assert.assertEquals(-1L, is.getExpectedContentSize());
+      Assert.assertFalse(is.isExpectedContentSizeDefined());
+      Assert.assertEquals(-1, is.read());
     }
   }
 
