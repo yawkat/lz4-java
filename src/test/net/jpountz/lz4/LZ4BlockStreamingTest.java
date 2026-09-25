@@ -380,6 +380,27 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
   }
 
   @Test
+  public void testAvailableAfterEmptyBlock() throws IOException {
+    final byte[] testBytes = randomArray(100, 256);
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    LZ4BlockOutputStream out = new LZ4BlockOutputStream(bytes);
+    out.write(testBytes);
+    out.close();
+
+    for (boolean stopOnEmptyBlock : new boolean[] { true, false }) {
+      LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+        .withStopOnEmptyBlock(stopOnEmptyBlock)
+        .build(new ByteArrayInputStream(bytes.toByteArray()));
+      byte[] actual = new byte[testBytes.length];
+      assertEquals(testBytes.length, readFully(in, actual));
+      assertEquals(-1, in.read());
+      assertEquals(0, in.available());
+      in.close();
+      assertArrayEquals(testBytes, actual);
+    }
+  }
+
+  @Test
   public void testCorruptedStream() {
     byte[] bytesWrongCompressed = {
       76, 90, 52, 66, 108, 111, 99, 107, 32,
