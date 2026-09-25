@@ -69,23 +69,28 @@ public enum Native {
     return loaded;
   }
 
-  private static void cleanupOldTempLibs() {
-    String tempFolder = new File(System.getProperty("java.io.tmpdir")).getAbsolutePath();
-    File dir = new File(tempFolder);
+  /** Temporary libraries older than this are considered stale and removed by {@link #cleanupOldTempLibs()}. */
+  private static final long TEMP_LIB_MAX_AGE_MILLIS = 60 * 60 * 1000L;
 
+  private static void cleanupOldTempLibs() {
+    cleanupOldTempLibs(new File(System.getProperty("java.io.tmpdir")).getAbsoluteFile(), System.currentTimeMillis());
+  }
+
+  static void cleanupOldTempLibs(File dir, long now) {
+    // This also matches .lck files left behind by older versions.
     File[] tempLibFiles = dir.listFiles(new FilenameFilter() {
       private final String searchPattern = "liblz4-java-";
 
       @Override
       public boolean accept(File dir, String name) {
-        return name.startsWith(searchPattern) && !name.endsWith(".lck");
+        return name.startsWith(searchPattern);
       }
     });
 
     if (tempLibFiles != null) {
       for (File tempLibFile : tempLibFiles) {
-        File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
-        if (!lckFile.exists()) {
+        // Libraries that are currently being extracted or loaded by another process are fresh.
+        if (now - tempLibFile.lastModified() > TEMP_LIB_MAX_AGE_MILLIS) {
           try {
             tempLibFile.delete();
           } catch (SecurityException e) {
@@ -118,12 +123,10 @@ public enum Native {
       throw new UnsupportedOperationException("Unsupported OS/arch, cannot find " + resourceName + ". Please try building from source.");
     }
     File tempLib = null;
-    File tempLibLock = null;
     try {
-      // Create the .lck file first to avoid a race condition
-      // with other concurrently running Java processes using lz4-java.
-      tempLibLock = File.createTempFile("liblz4-java-", "." + os().libExtension + ".lck");
-      tempLib = new File(tempLibLock.getAbsolutePath().replaceFirst(".lck$", ""));
+      // createTempFile exclusively creates a new file with a random name, so we never write to
+      // (or follow a symlink planted as) a file created by someone else.
+      tempLib = File.createTempFile("liblz4-java-", "." + os().libExtension);
       // copy to tempLib
       try (FileOutputStream out = new FileOutputStream(tempLib)) {
         byte[] buf = new byte[4096];
@@ -138,18 +141,16 @@ public enum Native {
       System.load(tempLib.getAbsolutePath());
       loaded = true;
     } catch (IOException e) {
-      throw new ExceptionInInitializerError("Cannot unpack liblz4-java: " + e);
+      throw new ExceptionInInitializerError(new IOException("Cannot unpack liblz4-java: " + e, e));
     } finally {
+      try {
+        is.close();
+      } catch (IOException ignored) {
+      }
       if (!loaded) {
-        if (tempLib != null && tempLib.exists()) {
-          if (!tempLib.delete()) {
-            throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary native library " + tempLib);
-          }
-        }
-        if (tempLibLock != null && tempLibLock.exists()) {
-          if (!tempLibLock.delete()) {
-            throw new ExceptionInInitializerError("Cannot unpack liblz4-java / cannot delete a temporary lock file " + tempLibLock);
-          }
+        if (tempLib != null) {
+          // Best effort, so that the original error is not masked. Leftovers are removed by cleanupOldTempLibs.
+          tempLib.delete();
         }
       } else {
         final String keepEnv = System.getenv("LZ4JAVA_KEEP_TEMP_JNI_LIB");
@@ -157,7 +158,6 @@ public enum Native {
         if ((keepEnv == null || !keepEnv.equals("true")) &&
             (keepProp == null || !keepProp.equals("true")))
           tempLib.deleteOnExit();
-        tempLibLock.deleteOnExit();
       }
     }
   }

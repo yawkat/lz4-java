@@ -1,11 +1,13 @@
-all_versions := `git tag --list 'v*' | tr '\n' ' '`
-latest_version := `git describe --tags --match='v*'`
+# Only strict vX.Y.Z tags are used; tag names are spliced into shell and Python code below.
+all_versions := `git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | tr '\n' ' '`
+latest_version := `git describe --tags --match='v*' --exclude='*[!v0-9.]*'`
 
 build := "target"
 path_javadoc := "javadoc"
 latest_version_name := "current"
 
 repo TAG:
+  @{{ if TAG =~ '^(v[0-9]+\.[0-9]+\.[0-9]+|current)$' { "true" } else { "echo 'invalid tag' >&2; false" } }}
   rm -rf '{{build}}/repo/lz4-java-{{TAG}}'
   mkdir -p '{{build}}/repo'
   if [ '{{TAG}}' = '{{latest_version_name}}' ]; then ln -s ../../.. '{{build}}/repo/lz4-java-{{TAG}}'; else git clone --shared --branch='{{TAG}}' .. '{{build}}/repo/lz4-java-{{TAG}}'; fi
@@ -13,6 +15,7 @@ repo TAG:
 template NAME TAG: (repo TAG)
   #!/usr/bin/env -S uv run --script
   # /// script
+  # requires-python = ">=3.12"
   # dependencies = [
   #   "semver",
   #   "mistune",
@@ -58,7 +61,7 @@ template NAME TAG: (repo TAG)
         selected_version='{{TAG}}',
         selected_version_actual=selected_version_actual,
         path_javadoc='{{path_javadoc}}',
-        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
+        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer(), plugins=['table'])(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
         pygments_style=lambda: html_formatter.get_style_defs()
         ))
 
@@ -74,6 +77,7 @@ version TAG: (javadoc TAG) (template "index.html" TAG)
 rewrite-version-links:
   #!/usr/bin/env -S uv run --script
   # /// script
+  # requires-python = ">=3.12"
   # ///
   import pathlib
 

@@ -6,7 +6,6 @@
   - Java 7 bytecode (source/target 1.7)
   - Generate sources via MVEL 2.3.2.Final (same as Ant)
   - Compile src/java, src/java-unsafe, and generated sources
-  - Include resources from src/resources
   - Include native libraries by extracting them from the published 1.8.0 jar
   - Preserve Automatic-Module-Name: org.lz4.java
 -->
@@ -139,12 +138,6 @@
   <build>
     <sourceDirectory>${project.basedir}/src/java</sourceDirectory>
     <testSourceDirectory>${project.basedir}/src/test</testSourceDirectory>
-    <resources>
-      <resource>
-        <directory>${project.basedir}/src/resources</directory>
-        <filtering>false</filtering>
-      </resource>
-    </resources>
     <testResources>
       <testResource>
         <directory>${project.basedir}/src/test-resources</directory>
@@ -348,6 +341,34 @@
   </build>
 
   <profiles>
+    <profile>
+      <!-- Record test coverage of the Java code with JaCoCo, report in target/site/jacoco/jacoco.xml -->
+      <id>coverage</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>0.8.15</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>deploy</id>
       <build>

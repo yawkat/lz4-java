@@ -36,6 +36,7 @@ import java.io.SequenceInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
@@ -46,6 +47,8 @@ import java.util.BitSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+
+import net.jpountz.xxhash.XXHashFactory;
 
 /**
  *
@@ -310,7 +313,30 @@ public class LZ4FrameIOStreamTest {
         fos.write(skipBuffer.array());
       }
       try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(0, is.available());
         Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(-1, is.read(new byte[1]));
+      }
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(-1, is.read(new byte[1]));
+        Assert.assertEquals(-1, is.read(new byte[1]));
+      }
+      try (InputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File))) {
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(0, is.skip(1));
+      }
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new FileInputStream(lz4File), true)) {
+        Assert.assertFalse(is.isExpectedContentSizeDefined());
+        Assert.assertEquals(-1L, is.getExpectedContentSize());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertFalse(is.isExpectedContentSizeDefined());
+        Assert.assertEquals(-1L, is.getExpectedContentSize());
       }
       // Extra one byte at the tail
       try (InputStream is = new LZ4FrameInputStream(new SequenceInputStream(new FileInputStream(lz4File), new ByteArrayInputStream(new byte[1])))) {
@@ -318,6 +344,124 @@ public class LZ4FrameIOStreamTest {
       }
     } finally {
       lz4File.delete();
+    }
+  }
+
+  /**
+   * Stream consisting of a skippable frame header, a synthetic payload of the given length that
+   * is generated on the fly (starting with the LZ4 frame magic, zeros otherwise), and a trailer.
+   */
+  private static final class SyntheticSkippableFrameStream extends InputStream {
+    private final byte[] header;
+    private final byte[] payloadPrefix;
+    private final long payloadSize;
+    private final byte[] trailer;
+    private long pos;
+
+    SyntheticSkippableFrameStream(long declaredSize, long payloadSize, byte[] trailer) {
+      this.header = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+          .putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE)
+          .putInt((int) declaredSize)
+          .array();
+      this.payloadPrefix = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+          .putInt(LZ4FrameOutputStream.MAGIC)
+          .array();
+      this.payloadSize = payloadSize;
+      this.trailer = trailer;
+    }
+
+    long remaining() {
+      return header.length + payloadSize + trailer.length - pos;
+    }
+
+    @Override
+    public int read() throws IOException {
+      final byte[] b = new byte[1];
+      return read(b, 0, 1) == -1 ? -1 : b[0] & 0xFF;
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) {
+      if (len == 0) {
+        return 0;
+      }
+      final long payloadEnd = header.length + payloadSize;
+      final int n;
+      if (pos < header.length) {
+        n = (int) Math.min(len, header.length - pos);
+        System.arraycopy(header, (int) pos, b, off, n);
+      } else if (pos < payloadEnd) {
+        final long payloadPos = pos - header.length;
+        n = (int) Math.min(len, payloadEnd - pos);
+        Arrays.fill(b, off, off + n, (byte) 0);
+        for (int i = 0; i < n && payloadPos + i < payloadPrefix.length; i++) {
+          b[off + i] = payloadPrefix[(int) payloadPos + i];
+        }
+      } else if (pos < payloadEnd + trailer.length) {
+        n = (int) Math.min(len, payloadEnd + trailer.length - pos);
+        System.arraycopy(trailer, (int) (pos - payloadEnd), b, off, n);
+      } else {
+        return -1;
+      }
+      pos += n;
+      return n;
+    }
+  }
+
+  @Test
+  public void testLargeSkippableFrame() throws IOException {
+    // Skipping several GiB is slow-ish, only run this once
+    Assume.assumeTrue(testSize == 1 << 10);
+    final ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+    try (OutputStream os = new LZ4FrameOutputStream(compressed)) {
+      try (InputStream is = new FileInputStream(tmpFile)) {
+        copy(is, os);
+      }
+    }
+    // Skippable frame size >= 2^31, which does not fit in a signed int
+    final long skipSize = 0x80000000L;
+    try (InputStream is = new LZ4FrameInputStream(new SyntheticSkippableFrameStream(skipSize, skipSize, compressed.toByteArray()))) {
+      validateStreamEquals(is, tmpFile);
+      Assert.assertEquals(-1, is.read());
+    }
+    // Maximum skippable frame size
+    final long maxSkipSize = 0xFFFFFFFFL;
+    try (InputStream is = new LZ4FrameInputStream(new SyntheticSkippableFrameStream(maxSkipSize, maxSkipSize, compressed.toByteArray()))) {
+      validateStreamEquals(is, tmpFile);
+      Assert.assertEquals(-1, is.read());
+    }
+  }
+
+  @Test
+  public void testTruncatedLargeSkippableFrame() throws IOException {
+    // Skippable frame size >= 2^31, but the stream ends early: the skip must consume all that is available
+    final SyntheticSkippableFrameStream truncated = new SyntheticSkippableFrameStream(0x80000000L, 64, new byte[0]);
+    try (InputStream is = new LZ4FrameInputStream(truncated)) {
+      final IOException e = Assert.assertThrows(IOException.class, is::read);
+      Assert.assertEquals(LZ4FrameInputStream.PREMATURE_EOS, e.getMessage());
+      Assert.assertEquals(0, truncated.remaining());
+    }
+  }
+
+  @Test
+  public void testEmptySkippableFrameOnly() throws IOException {
+    final ByteBuffer frame = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+    frame.putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE);
+    frame.putInt(0);
+    for (boolean readSingleFrame : new boolean[] {false, true}) {
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame.array()), readSingleFrame)) {
+        Assert.assertEquals(0, is.available());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read());
+        Assert.assertEquals(-1, is.read(new byte[1]));
+        Assert.assertEquals(0, is.skip(1));
+        Assert.assertEquals(0, is.available());
+      }
+    }
+    try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame.array()), true)) {
+      Assert.assertEquals(-1L, is.getExpectedContentSize());
+      Assert.assertFalse(is.isExpectedContentSizeDefined());
+      Assert.assertEquals(-1, is.read());
     }
   }
 
@@ -430,6 +574,152 @@ public class LZ4FrameIOStreamTest {
       }
     } finally {
       lz4File.delete();
+    }
+  }
+
+  private static final int FLG_BLOCK_INDEPENDENCE = 0x60; // version 01, block independence
+  private static final int FLG_CONTENT_CHECKSUM = 0x04;
+  private static final int BD_64KB = 0x40;
+  private static final int BD_4MB = 0x70;
+
+  /**
+   * Writes a frame with the given FLG and BD bytes, and the given data in a single block (no block if data is empty).
+   */
+  private static void writeFrame(ByteArrayOutputStream out, int flgByte, int bdByte, byte[] data, boolean compress) {
+    final byte[] descriptor = {(byte) flgByte, (byte) bdByte};
+    final int headerHash = (XXHashFactory.fastestInstance().hash32().hash(descriptor, 0, descriptor.length, 0) >> 8) & 0xFF;
+    final ByteBuffer header = ByteBuffer.allocate(7).order(ByteOrder.LITTLE_ENDIAN);
+    header.putInt(LZ4FrameOutputStream.MAGIC).put(descriptor).put((byte) headerHash);
+    out.write(header.array(), 0, header.position());
+    final ByteBuffer intBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+    if (data.length > 0) {
+      if (compress) {
+        final byte[] compressed = LZ4Factory.fastestJavaInstance().fastCompressor().compress(data);
+        intBuffer.putInt(0, compressed.length);
+        out.write(intBuffer.array(), 0, 4);
+        out.write(compressed, 0, compressed.length);
+      } else {
+        intBuffer.putInt(0, data.length | LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK);
+        out.write(intBuffer.array(), 0, 4);
+        out.write(data, 0, data.length);
+      }
+    }
+    intBuffer.putInt(0, 0); // EndMark
+    out.write(intBuffer.array(), 0, 4);
+    if ((flgByte & FLG_CONTENT_CHECKSUM) != 0) {
+      intBuffer.putInt(0, XXHashFactory.fastestInstance().hash32().hash(data, 0, data.length, 0));
+      out.write(intBuffer.array(), 0, 4);
+    }
+  }
+
+  private static void writeFrame(ByteArrayOutputStream out, int bdByte, byte[] data) {
+    writeFrame(out, FLG_BLOCK_INDEPENDENCE, bdByte, data, true);
+  }
+
+  private static void writeEmptySkippableFrame(ByteArrayOutputStream out) {
+    final ByteBuffer frame = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+    frame.putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE).putInt(0);
+    out.write(frame.array(), 0, frame.position());
+  }
+
+  /**
+   * Decodes the given input and returns the number of bytes allocated by the current thread while doing so.
+   */
+  private static long allocatedBytesForDecode(byte[] input, long expectedLength) throws IOException {
+    Assume.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean);
+    final com.sun.management.ThreadMXBean threadMXBean = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+    Assume.assumeTrue(threadMXBean.isThreadAllocatedMemorySupported() && threadMXBean.isThreadAllocatedMemoryEnabled());
+
+    final byte[] out = new byte[1 << 10];
+    final long threadId = Thread.currentThread().getId();
+    long allocated = 0;
+    // the first iteration is a warm-up, so that one-time allocations (e.g. class initialization) are not counted
+    for (int i = 0; i < 2; i++) {
+      final long allocatedBefore = threadMXBean.getThreadAllocatedBytes(threadId);
+      long length = 0;
+      try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(input))) {
+        int n;
+        while ((n = is.read(out)) != -1) {
+          length += n;
+        }
+      }
+      allocated = threadMXBean.getThreadAllocatedBytes(threadId) - allocatedBefore;
+      Assert.assertEquals(expectedLength, length);
+    }
+    return allocated;
+  }
+
+  @Test
+  public void testBlockBuffersReusedAcrossFrames() throws IOException {
+    final byte[] data = new byte[] {1, 2, 3};
+    final int frameCount = 2000;
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    for (int i = 0; i < frameCount; i++) {
+      writeFrame(baos, BD_4MB, new byte[0]);
+      // the content checksum hash is reused across frames, so this also checks that it is reset
+      writeFrame(baos, FLG_BLOCK_INDEPENDENCE | FLG_CONTENT_CHECKSUM, BD_4MB, data, true);
+    }
+    final long allocated = allocatedBytesForDecode(baos.toByteArray(), (long) frameCount * data.length);
+    // one raw and one compressed buffer of 4 MiB each, plus some slack
+    Assert.assertTrue("Allocated " + allocated + " bytes", allocated < 3 * (8L << 20));
+  }
+
+  @Test
+  public void testFramesWithoutBlocksAllocation() throws IOException {
+    final int frameCount = 10000;
+    final ByteArrayOutputStream checksumFrames = new ByteArrayOutputStream();
+    final ByteArrayOutputStream skippableFrames = new ByteArrayOutputStream();
+    for (int i = 0; i < frameCount; i++) {
+      writeFrame(checksumFrames, FLG_BLOCK_INDEPENDENCE | FLG_CONTENT_CHECKSUM, BD_4MB, new byte[0], true);
+      writeEmptySkippableFrame(skippableFrames);
+    }
+    final long checksumAllocated = allocatedBytesForDecode(checksumFrames.toByteArray(), 0);
+    Assert.assertTrue("Allocated " + checksumAllocated + " bytes", checksumAllocated < frameCount * 1024L);
+    final long skippableAllocated = allocatedBytesForDecode(skippableFrames.toByteArray(), 0);
+    Assert.assertTrue("Allocated " + skippableAllocated + " bytes", skippableAllocated < frameCount * 64L);
+  }
+
+  @Test
+  public void testBlockLargerThanFrameBlockSizeAfterLargerFrame() throws IOException {
+    final byte[] first = new byte[] {1, 2, 3};
+    final byte[] tooLarge = new byte[(64 << 10) + 1];
+    for (boolean compress : new boolean[] {true, false}) {
+      final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      writeFrame(baos, FLG_BLOCK_INDEPENDENCE, BD_4MB, first, true);
+      // 64 KiB max block size, but a larger block
+      writeFrame(baos, FLG_BLOCK_INDEPENDENCE, BD_64KB, tooLarge, compress);
+      try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
+        final byte[] out = new byte[first.length];
+        fillBuffer(out, is);
+        Assert.assertArrayEquals(first, out);
+        Assert.assertThrows(IOException.class, is::read);
+      }
+    }
+  }
+
+  @Test
+  public void testMultipleFramesWithDifferentBlockSizes() throws IOException {
+    final LZ4FrameOutputStream.BLOCKSIZE[] blockSizes = {
+        LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB,
+        LZ4FrameOutputStream.BLOCKSIZE.SIZE_4MB,
+        LZ4FrameOutputStream.BLOCKSIZE.SIZE_256KB,
+        LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB,
+        LZ4FrameOutputStream.BLOCKSIZE.SIZE_1MB,
+    };
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    for (LZ4FrameOutputStream.BLOCKSIZE blockSize : blockSizes) {
+      try (OutputStream os = new LZ4FrameOutputStream(baos, blockSize)) {
+        try (InputStream is = new FileInputStream(tmpFile)) {
+          copy(is, os);
+        }
+      }
+    }
+    final byte[] compressed = baos.toByteArray();
+    try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(compressed))) {
+      for (int i = 0; i < blockSizes.length; i++) {
+        validateStreamEquals(is, tmpFile);
+      }
+      Assert.assertEquals(-1, is.read());
     }
   }
 

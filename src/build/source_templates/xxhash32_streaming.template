@@ -64,13 +64,14 @@ final class StreamingXXHash32Java${type} extends AbstractStreamingXXHash32Java {
   public void update(byte[] buf, int off, int len) {
     checkRange(buf, off, len);
 
-    totalLen += len;
-
-    if (memSize + len < 16) { // fill in tmp buffer
+    if (len < 16 - memSize) { // fill in tmp buffer
       System.arraycopy(buf, off, memory, memSize, len);
       memSize += len;
+      totalLen += len;
       return;
     }
+
+    totalLen += len;
 
     final int end = off + len;
 

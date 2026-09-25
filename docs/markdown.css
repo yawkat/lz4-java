@@ -36,3 +36,13 @@ html {
   background-color: #aa0000;
   color: #fff;
 }
+table {
+  border-collapse: collapse;
+}
+th, td {
+  border: 1px solid #ccc;
+  padding: 0.3em 0.6em;
+}
+th {
+  background: #eee;
+}
