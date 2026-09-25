@@ -241,6 +241,22 @@ public class XXHash32Test extends AbstractLZ4Test {
   }
 
   @Test
+  @Repeat(iterations = 20)
+  public void testAsChecksumIsMaskedTo28Bits() {
+    final byte[] buf = randomArray(randomInt(1000), 256);
+    final int seed = randomInt();
+    final StreamingXXHash32[] hashes = new StreamingXXHash32[] {
+      XXHashFactory.nativeInstance().newStreamingHash32(seed),
+      XXHashFactory.unsafeInstance().newStreamingHash32(seed),
+      XXHashFactory.safeInstance().newStreamingHash32(seed)
+    };
+    for (StreamingXXHash32 hash : hashes) {
+      hash.update(buf, 0, buf.length);
+      assertEquals(hash.toString(), hash.getValue() & 0x0FFFFFFFL, hash.asChecksum().getValue());
+    }
+  }
+
+  @Test
   public void test4GB() {
     byte[] bytes = new byte[randomIntBetween(1 << 22, 1 << 26)];
     for (int i = 0; i < bytes.length; ++i) {
