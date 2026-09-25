@@ -16,7 +16,12 @@ package net.jpountz.xxhash;
  * limitations under the License.
  */
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import net.jpountz.lz4.AbstractLZ4Test;
 import net.jpountz.util.SafeUtils;
@@ -101,6 +106,22 @@ public class XXHash32Test extends AbstractLZ4Test {
     for (XXHash32 xxHash : INSTANCES) {
       xxHash.hash(new byte[0], 0, 0, seed);
       xxHash.hash(copyOf(new byte[0], 0, 0), 0, 0, seed);
+    }
+  }
+
+  @Test
+  public void testEmptyMappedBuffer() throws IOException {
+    // a zero-length mapping is a direct buffer with a NULL address
+    final Path file = Files.createTempFile("xxhash", ".dat");
+    try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+      final ByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, 0);
+      final int seed = randomInt();
+      final int expected = XXHashFactory.safeInstance().hash32().hash(buf, 0, 0, seed);
+      for (int i = 0; i < 2; ++i) {
+        assertEquals(expected, XXHashFactory.nativeInstance().hash32().hash(buf, 0, 0, seed));
+      }
+    } finally {
+      Files.delete(file);
     }
   }
 

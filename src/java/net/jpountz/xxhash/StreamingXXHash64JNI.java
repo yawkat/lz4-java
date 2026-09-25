@@ -56,8 +56,10 @@ final class StreamingXXHash64JNI extends StreamingXXHash64 {
   @Override
   public synchronized void reset() {
     checkState();
+    // create the new state first so that a failed init leaves this instance usable
+    final long newState = XXHashJNI.XXH64_init(seed);
     XXHashJNI.XXH64_free(state);
-    state = XXHashJNI.XXH64_init(seed);
+    state = newState;
   }
 
   @Override
