@@ -18,6 +18,7 @@ package net.jpountz.lz4;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -401,6 +402,34 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
   }
 
   @Test
+  public void testTruncatedHeaderAfterConcatenatedStream() throws IOException {
+    final byte[] testBytes = randomArray(64, 256);
+    ByteArrayOutputStream bytesOs = new ByteArrayOutputStream();
+    LZ4BlockOutputStream out = new LZ4BlockOutputStream(bytesOs);
+    out.write(testBytes);
+    out.close();
+    final byte[] bytes = bytesOs.toByteArray();
+
+    // Control: a complete stream without trailing bytes reads cleanly
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(bytes));
+    assertArrayEquals(testBytes, in.readAllBytes());
+    in.close();
+
+    // A stream followed by a partial block header is truncated, not a clean end
+    for (int k = 1; k < LZ4BlockOutputStream.HEADER_LENGTH; ++k) {
+      final byte[] truncated = Arrays.copyOf(bytes, bytes.length + k);
+      System.arraycopy(bytes, 0, truncated, bytes.length, k);
+      final LZ4BlockInputStream truncatedIn = lz4BlockInputStreamBuilder()
+        .withStopOnEmptyBlock(false)
+        .build(new ByteArrayInputStream(truncated));
+      var e = assertThrows(EOFException.class, truncatedIn::readAllBytes);
+      assertEquals("Stream ended prematurely", e.getMessage());
+    }
+  }
+
+  @Test
   public void testCorruptedStream() {
     byte[] bytesWrongCompressed = {
       76, 90, 52, 66, 108, 111, 99, 107, 32,
@@ -423,6 +452,25 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     };
     e = assertThrows(IOException.class, () -> lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(bytesWrongDecompressed)).readAllBytes());
     assertEquals("Stream is corrupted", e.getMessage());
+  }
+
+  @Test
+  public void testDefaultChecksumIsMaskedTo28Bits() throws IOException {
+    final byte[] data = "Hello, world!".getBytes(Charset.forName("UTF-8"));
+    final int fullHash = XXHashFactory.fastestInstance().hash32().hash(data, 0, data.length, LZ4BlockOutputStream.DEFAULT_SEED);
+    assertEquals(0xcfb1a2e3, fullHash);
+
+    final ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (LZ4BlockOutputStream os = new LZ4BlockOutputStream(out)) {
+      os.write(data);
+    }
+    final byte[] compressed = out.toByteArray();
+    final int checksumOffset = LZ4BlockOutputStream.MAGIC_LENGTH + 9;
+    // XXHash32 with the top 4 bits cleared, little-endian
+    assertArrayEquals(new byte[] { (byte) 0xe3, (byte) 0xa2, (byte) 0xb1, 0x0f },
+        Arrays.copyOfRange(compressed, checksumOffset, checksumOffset + 4));
+
+    assertArrayEquals(data, lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(compressed)).readAllBytes());
   }
 
   @Test
