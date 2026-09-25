@@ -307,6 +307,13 @@ public final class LZ4Factory {
    * Specifically, the native implementation of a high compression level
    * is not necessarily faster than the safe/unsafe Java implementation
    * of the same compression level.
+   * <p>Higher levels search harder for matches. In the safe and unsafe Java
+   * implementations, the maximum match-search effort per position doubles with
+   * each level ({@code 2^(level-1)} attempts, up to 65536 at level 17). The
+   * cost stays linear in the input size, but on highly repetitive or
+   * deliberately crafted input, high levels can be orders of magnitude slower
+   * than on typical data. When compressing untrusted input and CPU time
+   * matters, use the default level (9) or lower.
    *
    * @param compressionLevel the compression level between [1, 17]; the higher the level, the higher the compression ratio
    * @return a {@link LZ4Compressor} which requires more memory than

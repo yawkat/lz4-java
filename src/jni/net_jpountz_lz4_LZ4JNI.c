@@ -123,6 +123,9 @@ JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1compress_1limitedOutput
   }
 
   if (out == NULL) {
+    if (srcArray != NULL) {
+      (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+    }
     throw_OOM(env);
     return 0;
   }
@@ -170,6 +173,9 @@ JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1compressHC
   }
 
   if (out == NULL) {
+    if (srcArray != NULL) {
+      (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+    }
     throw_OOM(env);
     return 0;
   }
@@ -217,6 +223,9 @@ JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1decompress_1fast
   } 
   
   if (out == NULL) {
+    if (srcArray != NULL) {
+      (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+    }
     throw_OOM(env);
     return 0;
   }
@@ -264,6 +273,9 @@ JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1decompress_1safe
   } 
   
   if (out == NULL) {
+    if (srcArray != NULL) {
+      (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+    }
     throw_OOM(env);
     return 0;
   }
