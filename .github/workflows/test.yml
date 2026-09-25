@@ -71,6 +71,8 @@ jobs:
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: target/site/jacoco/jacoco.xml
-          # OIDC tokens are not available to pull requests from forks, which use tokenless upload instead
-          use_oidc: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) }}
+          disable_search: true
+          # OIDC tokens are not available to pull requests from other repositories, which use tokenless upload instead.
+          # Don't use head.repo.fork here: this repository is itself a fork, so that is always true.
+          use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           fail_ci_if_error: false
