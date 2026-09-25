@@ -1,6 +1,9 @@
 # LZ4 Java
 
 [![Maven Central](https://img.shields.io/maven-central/v/at.yawk.lz4/lz4-java)](https://central.sonatype.com/artifact/at.yawk.lz4/lz4-java)
+[![codecov](https://codecov.io/gh/yawkat/lz4-java/graph/badge.svg)](https://codecov.io/gh/yawkat/lz4-java)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14930/badge)](https://www.bestpractices.dev/projects/14930)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/yawkat/lz4-java/badge)](https://scorecard.dev/viewer/?uri=github.com/yawkat/lz4-java)
 
 Fast [LZ4](https://github.com/lz4/lz4) compression and [xxHash](https://github.com/Cyan4973/xxHash) hashing for Java,
 with JNI bindings to the reference C implementation and a pure Java fallback.
