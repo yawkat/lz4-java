@@ -31,7 +31,11 @@ jobs:
         run: sudo apt install -y just
       - name: Build documentation (explicit selected version)
         if: github.event_name == 'workflow_dispatch' && inputs.selected_version
-        run: cd docs && just latest_version=${{ inputs.selected_version }} all
+        env:
+          SELECTED_VERSION: ${{ inputs.selected_version }}
+        run: |
+          [[ "$SELECTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid selected_version: $SELECTED_VERSION" >&2; exit 1; }
+          cd docs && just latest_version="$SELECTED_VERSION" all
       - name: Build documentation
         if: github.event_name != 'workflow_dispatch' || !inputs.selected_version
         run: cd docs && just all
