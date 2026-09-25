@@ -71,7 +71,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       - name: Install cross toolchain (if needed)
         if: ${{ matrix.apt != '' }}
@@ -129,7 +128,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       - name: Build (native binary build only)
         if: ${{ !matrix.fullbuild }}
@@ -174,7 +172,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       # See LZ4FrameIOStreamTest
       - name: Download LZ4 CLI for tests
@@ -229,7 +226,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
           gpg-private-key: ${{ secrets.GPG_KEY }}
           gpg-passphrase: GPG_PASSWORD
           server-id: 'central'
@@ -242,7 +238,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
 
       - name: Download natives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
