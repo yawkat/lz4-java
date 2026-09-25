@@ -10,6 +10,12 @@ on:
         type: string
         required: false
 
+permissions:
+  contents: read
+  # Needed by the "Check PR"/"Comment on PR" steps, which post the preview URL
+  # when the workflow is dispatched from a non-main branch that has an open PR
+  pull-requests: write
+
 jobs:
   build:
     name: Build documentation

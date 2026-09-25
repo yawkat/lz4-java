@@ -12,6 +12,9 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 jobs:
   linux:
     name: Linux natives (${{ matrix.arch }})
