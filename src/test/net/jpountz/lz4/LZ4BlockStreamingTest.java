@@ -18,6 +18,7 @@ package net.jpountz.lz4;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
@@ -377,6 +378,34 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     in2.close();
 
     assertArrayEquals(expected, actual2);
+  }
+
+  @Test
+  public void testTruncatedHeaderAfterConcatenatedStream() throws IOException {
+    final byte[] testBytes = randomArray(64, 256);
+    ByteArrayOutputStream bytesOs = new ByteArrayOutputStream();
+    LZ4BlockOutputStream out = new LZ4BlockOutputStream(bytesOs);
+    out.write(testBytes);
+    out.close();
+    final byte[] bytes = bytesOs.toByteArray();
+
+    // Control: a complete stream without trailing bytes reads cleanly
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+      .withStopOnEmptyBlock(false)
+      .build(new ByteArrayInputStream(bytes));
+    assertArrayEquals(testBytes, in.readAllBytes());
+    in.close();
+
+    // A stream followed by a partial block header is truncated, not a clean end
+    for (int k = 1; k < LZ4BlockOutputStream.HEADER_LENGTH; ++k) {
+      final byte[] truncated = Arrays.copyOf(bytes, bytes.length + k);
+      System.arraycopy(bytes, 0, truncated, bytes.length, k);
+      final LZ4BlockInputStream truncatedIn = lz4BlockInputStreamBuilder()
+        .withStopOnEmptyBlock(false)
+        .build(new ByteArrayInputStream(truncated));
+      var e = assertThrows(EOFException.class, truncatedIn::readAllBytes);
+      assertEquals("Stream ended prematurely", e.getMessage());
+    }
   }
 
   @Test

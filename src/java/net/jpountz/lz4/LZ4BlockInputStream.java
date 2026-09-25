@@ -244,13 +244,14 @@ public class LZ4BlockInputStream extends FilterInputStream {
   }
 
   private void refill() throws IOException {
-    if (!tryReadFully(compressedBuffer, HEADER_LENGTH)) {
-      if (!stopOnEmptyBlock) {
+    final int headerRead = tryReadFully(compressedBuffer, HEADER_LENGTH);
+    if (headerRead != HEADER_LENGTH) {
+      // Only a stream that ends exactly at a block boundary is a clean end
+      if (headerRead == 0 && !stopOnEmptyBlock) {
         finished = true;
-      } else {
-        throw new EOFException("Stream ended prematurely");
+        return;
       }
-      return;
+      throw new EOFException("Stream ended prematurely");
     }
     for (int i = 0; i < MAGIC_LENGTH; ++i) {
       if (compressedBuffer[i] != MAGIC[i]) {
@@ -327,22 +328,21 @@ public class LZ4BlockInputStream extends FilterInputStream {
   }
 
   // Like readFully(), except it signals incomplete reads by returning
-  // false instead of throwing EOFException.
-  private boolean tryReadFully(byte[] b, int len) throws IOException {
+  // the number of bytes read (less than len) instead of throwing EOFException.
+  private int tryReadFully(byte[] b, int len) throws IOException {
     int read = 0;
     while (read < len) {
       final int r = in.read(b, read, len - read);
       if (r < 0) {
-        return false;
+        break;
       }
       read += r;
     }
-    assert len == read;
-    return true;
+    return read;
   }
 
   private void readFully(byte[] b, int len) throws IOException {
-    if (!tryReadFully(b, len)) {
+    if (tryReadFully(b, len) != len) {
       throw new EOFException("Stream ended prematurely");
     }
   }
