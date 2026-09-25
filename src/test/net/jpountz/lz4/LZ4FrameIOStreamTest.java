@@ -16,6 +16,7 @@ package net.jpountz.lz4;
  * limitations under the License.
  */
 
+import net.jpountz.xxhash.XXHashFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -864,6 +865,48 @@ public class LZ4FrameIOStreamTest {
       }
     } finally {
       lz4File.delete();
+    }
+  }
+
+  private static byte[] frameHeader(int flg, int bd) {
+    final byte[] descriptor = new byte[]{(byte) flg, (byte) bd};
+    final byte hc = (byte) ((XXHashFactory.fastestInstance().hash32().hash(descriptor, 0, descriptor.length, 0) >> 8) & 0xFF);
+    final ByteBuffer header = ByteBuffer.allocate(7).order(ByteOrder.LITTLE_ENDIAN);
+    header.putInt(LZ4FrameOutputStream.MAGIC);
+    header.put(descriptor);
+    header.put(hc);
+    return header.array();
+  }
+
+  private static void assertInvalidDescriptor(IOException e) {
+    Assert.assertEquals(LZ4FrameInputStream.INVALID_DESCRIPTOR, e.getMessage());
+  }
+
+  @Test
+  public void testInvalidOrUnsupportedFrameDescriptor() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
+    final int[][] descriptors = {
+        {0x40, 0x70}, // dependent blocks
+        {0x61, 0x70}, // dictionary ID
+        {0x62, 0x70}, // reserved FLG bit
+        {0x20, 0x70}, // unsupported version
+        {0x60, 0x30}, // block size indicator 3
+        {0x60, 0x41}, // reserved BD bit
+    };
+    for (final int[] d : descriptors) {
+      final byte[] header = frameHeader(d[0], d[1]);
+      try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(header))) {
+        assertInvalidDescriptor(Assert.assertThrows(IOException.class, is::read));
+      }
+      try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(header))) {
+        assertInvalidDescriptor(Assert.assertThrows(IOException.class, () -> is.skip(1)));
+      }
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(header), true)) {
+        assertInvalidDescriptor(Assert.assertThrows(IOException.class, is::getExpectedContentSize));
+      }
+      try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(header), true)) {
+        assertInvalidDescriptor(Assert.assertThrows(IOException.class, is::isExpectedContentSizeDefined));
+      }
     }
   }
 }
