@@ -178,6 +178,10 @@ jobs:
         shell: powershell
         run: |
           curl.exe --fail-with-body --no-progress-meter --output lz4_win64.zip --location https://github.com/lz4/lz4/releases/download/v1.10.0/lz4_win64_v1_10_0.zip
+          # SHA-256 of the zip above; must be updated when the lz4 version changes
+          $expected = '8cb562a53189dfc8a53ec12469b91f1b51a5075036061a86b55738183bf4ab74'
+          $actual = (Get-FileHash lz4_win64.zip -Algorithm SHA256).Hash
+          if ($actual -ne $expected) { throw "lz4_win64.zip SHA-256 mismatch: expected $expected, got $actual" }
           mkdir lz4-cli
           tar -x -v -f lz4_win64.zip -C lz4-cli lz4.exe
           echo "$(Get-Location)\lz4-cli" >> "$env:GITHUB_PATH"
