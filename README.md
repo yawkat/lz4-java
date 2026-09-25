@@ -1,7 +1,7 @@
 # LZ4 Java
 
 [![Maven Central](https://img.shields.io/maven-central/v/at.yawk.lz4/lz4-java)](https://central.sonatype.com/artifact/at.yawk.lz4/lz4-java)
-[![codecov](https://codecov.io/gh/yawkat/lz4-java/graph/badge.svg)](https://codecov.io/gh/yawkat/lz4-java)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Flz4-java.yawk.at%2Fcurrent%2Fcoverage%2Fbadge.json)](https://lz4-java.yawk.at/current/coverage/)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14930/badge)](https://www.bestpractices.dev/projects/14930)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/yawkat/lz4-java/badge)](https://scorecard.dev/viewer/?uri=github.com/yawkat/lz4-java)
 

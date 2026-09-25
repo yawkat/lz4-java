@@ -342,7 +342,7 @@
 
   <profiles>
     <profile>
-      <!-- Record test coverage of the Java code with JaCoCo, report in target/site/jacoco/jacoco.xml -->
+      <!-- Record test coverage of the Java code with JaCoCo, report in target/site/jacoco -->
       <id>coverage</id>
       <build>
         <plugins>
