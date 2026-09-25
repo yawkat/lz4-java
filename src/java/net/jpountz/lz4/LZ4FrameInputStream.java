@@ -166,10 +166,11 @@ public class LZ4FrameInputStream extends FilterInputStream {
   }
 
   private void skippableFrame() throws IOException {
-    int skipSize = readInt(in);
+    // the frame size is an unsigned 32-bit value
+    long skipSize = readInt(in) & 0xFFFFFFFFL;
     final byte[] skipBuffer = new byte[1 << 10];
     while (skipSize > 0) {
-      final int mySize = in.read(skipBuffer, 0, Math.min(skipSize, skipBuffer.length));
+      final int mySize = in.read(skipBuffer, 0, (int) Math.min(skipSize, skipBuffer.length));
       if (mySize < 0) {
         throw new IOException(PREMATURE_EOS);
       }
