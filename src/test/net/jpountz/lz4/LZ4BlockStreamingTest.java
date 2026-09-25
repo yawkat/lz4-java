@@ -405,6 +405,25 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
   }
 
   @Test
+  public void testDefaultChecksumIsMaskedTo28Bits() throws IOException {
+    final byte[] data = "Hello, world!".getBytes(Charset.forName("UTF-8"));
+    final int fullHash = XXHashFactory.fastestInstance().hash32().hash(data, 0, data.length, LZ4BlockOutputStream.DEFAULT_SEED);
+    assertEquals(0xcfb1a2e3, fullHash);
+
+    final ByteArrayOutputStream out = new ByteArrayOutputStream();
+    try (LZ4BlockOutputStream os = new LZ4BlockOutputStream(out)) {
+      os.write(data);
+    }
+    final byte[] compressed = out.toByteArray();
+    final int checksumOffset = LZ4BlockOutputStream.MAGIC_LENGTH + 9;
+    // XXHash32 with the top 4 bits cleared, little-endian
+    assertArrayEquals(new byte[] { (byte) 0xe3, (byte) 0xa2, (byte) 0xb1, 0x0f },
+        Arrays.copyOfRange(compressed, checksumOffset, checksumOffset + 4));
+
+    assertArrayEquals(data, lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(compressed)).readAllBytes());
+  }
+
+  @Test
   public void testRejectsInvalidLz4CompressedLength() {
     byte[] bytesCompressedEqOriginal = {
       76, 90, 52, 66, 108, 111, 99, 107, 32,
