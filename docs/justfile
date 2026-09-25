@@ -76,7 +76,7 @@ template NAME TAG: (repo TAG)
         selected_version='{{TAG}}',
         selected_version_actual=selected_version_actual,
         path_javadoc='{{path_javadoc}}',
-        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(readme_source()),
+        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer(), plugins=['table'])(readme_source()),
         pygments_style=lambda: html_formatter.get_style_defs()
         ))
 
