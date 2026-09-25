@@ -46,6 +46,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
   static final String NOT_SUPPORTED = "Stream unsupported";
   static final String BLOCK_HASH_MISMATCH = "Block checksum mismatch";
   static final String DESCRIPTOR_HASH_MISMATCH = "Stream frame descriptor corrupted";
+  static final String INVALID_DESCRIPTOR = "Invalid or unsupported frame descriptor";
   static final int MAGIC_SKIPPABLE_BASE = 0x184D2A50;
 
   private final LZ4SafeDecompressor decompressor;
@@ -193,10 +194,16 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
 
     final byte flgByte = (byte) (flgRead & 0xFF);
-    final LZ4FrameOutputStream.FLG flg = LZ4FrameOutputStream.FLG.fromByte(flgByte);
-    headerBuffer.put(flgByte);
     final byte bdByte = (byte) (bdRead & 0xFF);
-    final LZ4FrameOutputStream.BD bd = LZ4FrameOutputStream.BD.fromByte(bdByte);
+    final LZ4FrameOutputStream.FLG flg;
+    final LZ4FrameOutputStream.BD bd;
+    try {
+      flg = LZ4FrameOutputStream.FLG.fromByte(flgByte);
+      bd = LZ4FrameOutputStream.BD.fromByte(bdByte);
+    } catch (RuntimeException e) {
+      throw new IOException(INVALID_DESCRIPTOR, e);
+    }
+    headerBuffer.put(flgByte);
     headerBuffer.put(bdByte);
 
     this.frameInfo = new LZ4FrameOutputStream.FrameInfo(flg, bd);
