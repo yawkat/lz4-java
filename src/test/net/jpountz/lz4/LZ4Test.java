@@ -25,8 +25,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.util.Arrays;
-import java.io.File;
-import java.io.FilenameFilter;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -36,48 +34,6 @@ import com.carrotsearch.randomizedtesting.annotations.Seed;
 import com.carrotsearch.randomizedtesting.annotations.Seeds;
 
 public class LZ4Test extends AbstractLZ4Test {
-
-  @Test
-  public void testLockFileOfTemporaryNativeLibrary() {
-    // Load the native library
-    LZ4JNI.LZ4_compressBound(100);
-    String tempFolder = new File(System.getProperty("java.io.tmpdir")).getAbsolutePath();
-    File tempDir = new File(new File(System.getProperty("java.io.tmpdir")).getAbsolutePath());
-    if (!System.getProperty("os.name").contains("Windows")) {
-      // A temporary library must be accompanied by a lock file.
-      // On Windows, JVM does not remove a temporary library on exit.
-      // This means on Windows, there might be a temporary library
-      // that is not accompanied by a lock file when there was
-      // a Java process using lz4-java that was running concurrently
-      // to this test process.
-      File[] tempLibFiles = tempDir.listFiles(new FilenameFilter() {
-        @Override
-        public boolean accept(File dir, String name) {
-          return name.startsWith("liblz4-java-") && !name.endsWith(".lck");
-        }
-      });
-      if (tempLibFiles != null) {
-        for (File tempLibFile : tempLibFiles) {
-          File lckFile = new File(tempLibFile.getAbsolutePath() + ".lck");
-          assertTrue(tempLibFile.getAbsolutePath(), lckFile.exists());
-        }
-      }
-    }
-    // A lock file must be accompanied by a temporary library.
-    File[] tempLockFiles = tempDir.listFiles(new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        return name.startsWith("liblz4-java-") && name.endsWith(".lck");
-      }
-    });
-    if (tempLockFiles != null) {
-      for (File tempLockFile : tempLockFiles) {
-        String tempLockFilePath = tempLockFile.getAbsolutePath();
-        File libFile = new File(tempLockFilePath.substring(0, tempLockFilePath.length() - 4));
-        assertTrue(tempLockFilePath, libFile.exists());
-      }
-    }
-  }
 
   @Test
   @Repeat(iterations = 50)

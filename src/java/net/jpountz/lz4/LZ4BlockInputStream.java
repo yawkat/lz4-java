@@ -261,7 +261,10 @@ public class LZ4BlockInputStream extends FilterInputStream {
 
   private void refill() throws IOException {
     try {
-      refill0();
+      // Loop rather than recurse over empty blocks so that a long run of them cannot overflow the stack
+      while (!readBlock()) {
+        // empty block with stopOnEmptyBlock == false, continue with the next block
+      }
     } catch (IOException e) {
       failure = e;
       throw e;
@@ -271,14 +274,20 @@ public class LZ4BlockInputStream extends FilterInputStream {
     }
   }
 
-  private void refill0() throws IOException {
-    if (!tryReadFully(compressedBuffer, HEADER_LENGTH)) {
-      if (!stopOnEmptyBlock) {
+  /**
+   * Reads the next block.
+   *
+   * @return {@code false} if an empty block was read and reading should continue with the next block
+   */
+  private boolean readBlock() throws IOException {
+    final int headerRead = tryReadFully(compressedBuffer, HEADER_LENGTH);
+    if (headerRead != HEADER_LENGTH) {
+      // Only a stream that ends exactly at a block boundary is a clean end
+      if (headerRead == 0 && !stopOnEmptyBlock) {
         finished = true;
-      } else {
-        throw new EOFException("Stream ended prematurely");
+        return true;
       }
-      return;
+      throw new EOFException("Stream ended prematurely");
     }
     for (int i = 0; i < MAGIC_LENGTH; ++i) {
       if (compressedBuffer[i] != MAGIC[i]) {
@@ -308,12 +317,12 @@ public class LZ4BlockInputStream extends FilterInputStream {
       if (check != 0) {
         throw new IOException("Stream is corrupted");
       }
+      o = 0;
       if (!stopOnEmptyBlock) {
-        refill();
-      } else {
-        finished = true;
+        return false;
       }
-      return;
+      finished = true;
+      return true;
     }
     if (buffer.length < originalLen) {
       buffer = new byte[Math.max(originalLen, buffer.length * 3 / 2)];
@@ -352,25 +361,25 @@ public class LZ4BlockInputStream extends FilterInputStream {
       throw new IOException("Stream is corrupted");
     }
     o = 0;
+    return true;
   }
 
   // Like readFully(), except it signals incomplete reads by returning
-  // false instead of throwing EOFException.
-  private boolean tryReadFully(byte[] b, int len) throws IOException {
+  // the number of bytes read (less than len) instead of throwing EOFException.
+  private int tryReadFully(byte[] b, int len) throws IOException {
     int read = 0;
     while (read < len) {
       final int r = in.read(b, read, len - read);
       if (r < 0) {
-        return false;
+        break;
       }
       read += r;
     }
-    assert len == read;
-    return true;
+    return read;
   }
 
   private void readFully(byte[] b, int len) throws IOException {
-    if (!tryReadFully(b, len)) {
+    if (tryReadFully(b, len) != len) {
       throw new EOFException("Stream ended prematurely");
     }
   }

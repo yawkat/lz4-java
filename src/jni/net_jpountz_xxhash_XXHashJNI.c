@@ -20,6 +20,20 @@
 
 static jclass OutOfMemoryError;
 
+/* Stand-in input for empty direct buffers whose address is NULL. */
+static const char empty_input[1] = { 0 };
+
+static int init_class_ref(JNIEnv *env, jclass *target, const char *className) {
+  jclass localClass = (*env)->FindClass(env, className);
+  if (localClass == NULL) {
+    return 0;
+  }
+
+  *target = (jclass) (*env)->NewGlobalRef(env, localClass);
+  (*env)->DeleteLocalRef(env, localClass);
+  return *target != NULL;
+}
+
 /*
  * Class:     net_jpountz_xxhash_XXHashJNI
  * Method:    init
@@ -27,7 +41,7 @@ static jclass OutOfMemoryError;
  */
 JNIEXPORT void JNICALL Java_net_jpountz_xxhash_XXHashJNI_init
   (JNIEnv *env, jclass cls) {
-  OutOfMemoryError = (*env)->FindClass(env, "java/lang/OutOfMemoryError");
+  init_class_ref(env, &OutOfMemoryError, "java/lang/OutOfMemoryError");
 }
 
 static void throw_OOM(JNIEnv *env) {
@@ -71,8 +85,13 @@ JNIEXPORT jint JNICALL Java_net_jpountz_xxhash_XXHashJNI_XXH32BB
 
   in = (char*) (*env)->GetDirectBufferAddress(env, buf);
   if (in == NULL) {
-    throw_OOM(env);
-    return 0;
+    if (len != 0) {
+      throw_OOM(env);
+      return 0;
+    }
+    /* e.g. a zero-length mapped buffer: hash the empty input */
+    in = (char*) empty_input;
+    off = 0;
   }
 
   h32 = XXH32(in + off, len, seed);
@@ -90,6 +109,11 @@ JNIEXPORT jlong JNICALL Java_net_jpountz_xxhash_XXHashJNI_XXH32_1init
   (JNIEnv *env, jclass cls, jint seed) {
 
   XXH32_state_t *state = XXH32_createState();
+  if (state == NULL) {
+    throw_OOM(env);
+    return 0;
+  }
+
   if (XXH32_reset(state, seed) != XXH_OK) {
     XXH32_freeState(state);
     throw_OOM(env);
@@ -181,8 +205,13 @@ JNIEXPORT jlong JNICALL Java_net_jpountz_xxhash_XXHashJNI_XXH64BB
 
   in = (char*) (*env)->GetDirectBufferAddress(env, buf);
   if (in == NULL) {
-    throw_OOM(env);
-    return 0;
+    if (len != 0) {
+      throw_OOM(env);
+      return 0;
+    }
+    /* e.g. a zero-length mapped buffer: hash the empty input */
+    in = (char*) empty_input;
+    off = 0;
   }
 
   h64 = XXH64(in + off, len, seed);
@@ -200,6 +229,11 @@ JNIEXPORT jlong JNICALL Java_net_jpountz_xxhash_XXHashJNI_XXH64_1init
   (JNIEnv *env, jclass cls, jlong seed) {
 
   XXH64_state_t *state = XXH64_createState();
+  if (state == NULL) {
+    throw_OOM(env);
+    return 0;
+  }
+
   if (XXH64_reset(state, seed) != XXH_OK) {
     XXH64_freeState(state);
     throw_OOM(env);
