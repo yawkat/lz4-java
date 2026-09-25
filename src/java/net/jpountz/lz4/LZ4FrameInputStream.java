@@ -30,6 +30,8 @@ import static net.jpountz.lz4.LZ4Utils.notEnoughSpace;
 
 /**
  * Implementation of the v1.5.1 LZ4 Frame format. This class is NOT thread safe.
+ * Once a read fails with an {@link IOException}, every later read or skip on
+ * this stream throws an {@link IOException} as well.
  * <p>
  * Not Supported:<ul>
  * <li>Dependent blocks</li>
@@ -65,6 +67,8 @@ public class LZ4FrameInputStream extends FilterInputStream {
   private boolean anyFrameRead = false;
 
   private LZ4FrameOutputStream.FrameInfo frameInfo = null;
+  // set once reading a frame header or block fails; the stream is unusable afterwards
+  private IOException failure = null;
 
   /**
    * Creates a new {@link InputStream} that will decompress data using fastest instances of {@link LZ4SafeDecompressor} and {@link XXHash32}.
@@ -136,6 +140,16 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @throws IOException On input stream read exception
    */
   private boolean nextFrameInfo() throws IOException {
+    try {
+      return nextFrameInfo0();
+    } catch (IOException e) {
+      throw fail(e);
+    } catch (RuntimeException e) {
+      throw fail(new IOException("Stream is corrupted", e));
+    }
+  }
+
+  private boolean nextFrameInfo0() throws IOException {
     while (true) {
       int size = 0;
       do {
@@ -263,6 +277,27 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @throws IOException
    */
   private void readBlock() throws IOException {
+    try {
+      readBlock0();
+    } catch (IOException e) {
+      throw fail(e);
+    } catch (RuntimeException e) {
+      throw fail(new IOException("Stream is corrupted", e));
+    }
+  }
+
+  private IOException fail(IOException e) {
+    failure = e;
+    return e;
+  }
+
+  private void ensureNotFailed() throws IOException {
+    if (failure != null) {
+      throw new IOException("Stream previously failed", failure);
+    }
+  }
+
+  private void readBlock0() throws IOException {
     int blockSize = readInt(in);
     final boolean compressed = (blockSize & LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK) == 0;
     blockSize &= ~LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK;
@@ -329,6 +364,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   @Override
   public int read() throws IOException {
+    ensureNotFailed();
     while (!firstFrameHeaderRead || buffer.remaining() == 0) {
       if (!firstFrameHeaderRead || frameInfo.isFinished()) {
         if (firstFrameHeaderRead && readSingleFrame) {
@@ -348,6 +384,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
     if ((off < 0) || (len < 0) || notEnoughSpace(b.length - off, len)) {
       throw new IndexOutOfBoundsException();
     }
+    ensureNotFailed();
     while (!firstFrameHeaderRead || buffer.remaining() == 0) {
       if (!firstFrameHeaderRead || frameInfo.isFinished()) {
         if (firstFrameHeaderRead && readSingleFrame) {
@@ -366,6 +403,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   @Override
   public long skip(long n) throws IOException {
+    ensureNotFailed();
     if (n <= 0) {
       return 0;
     }
@@ -387,7 +425,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   @Override
   public int available() throws IOException {
-    if (!firstFrameHeaderRead) {
+    if (failure != null || !firstFrameHeaderRead) {
       return 0;
     }
     return buffer.remaining();
@@ -424,6 +462,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @see #LZ4FrameInputStream(InputStream, LZ4SafeDecompressor, XXHash32, boolean)
    */
   public long getExpectedContentSize() throws IOException {
+    ensureNotFailed();
     if (!readSingleFrame) {
       throw new UnsupportedOperationException("Operation not permitted when multiple frames can be read");
     }
@@ -442,6 +481,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @throws IOException On input stream read exception
    */
   public boolean isExpectedContentSizeDefined() throws IOException {
+    ensureNotFailed();
     if (readSingleFrame) {
       if (!firstFrameHeaderRead) {
         if (!nextFrameInfo()) {

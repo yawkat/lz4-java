@@ -23,6 +23,8 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.function.Consumer;
@@ -484,5 +486,58 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
       .build(new ByteArrayInputStream(bytesCompressedGtOriginal));
     assertArrayEquals(expectedCompressedGtOriginal, in.readAllBytes());
     in.close();
+  }
+
+  private static byte[] twoBlockStream() throws IOException {
+    // first block holds 64 bytes, second block 32 bytes
+    var baos = new ByteArrayOutputStream();
+    try (var out = new LZ4BlockOutputStream(baos, 64)) {
+      for (int i = 0; i < 96; ++i) {
+        out.write(i);
+      }
+    }
+    return baos.toByteArray();
+  }
+
+  private static void assertFailedStream(LZ4BlockInputStream in) throws IOException {
+    assertThrows(IOException.class, in::read);
+    assertThrows(IOException.class, () -> in.read(new byte[16]));
+    assertThrows(IOException.class, () -> in.skip(1));
+    assertThrows(IOException.class, in::readAllBytes);
+    assertThrows(IOException.class, () -> in.readNBytes(16));
+    assertEquals(0, in.available());
+    in.close();
+  }
+
+  @Test
+  public void testFailureIsStickyAfterChecksumMismatch() throws IOException {
+    byte[] compressed = twoBlockStream();
+    final int secondBlock = LZ4BlockOutputStream.HEADER_LENGTH
+      + net.jpountz.util.SafeUtils.readIntLE(compressed, LZ4BlockOutputStream.MAGIC_LENGTH + 1);
+    // corrupt the checksum of the second block
+    compressed[secondBlock + LZ4BlockOutputStream.MAGIC_LENGTH + 9] ^= 1;
+
+    LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(compressed));
+    byte[] first = new byte[64];
+    assertEquals(64, in.readNBytes(first, 0, 64));
+    var e = assertThrows(IOException.class, in::read);
+    assertEquals("Stream is corrupted", e.getMessage());
+    assertFailedStream(in);
+  }
+
+  @Test
+  public void testFailureIsStickyAfterInvalidOriginalLength() throws IOException {
+    for (int originalLen : new int[] {-1, Integer.MAX_VALUE}) {
+      byte[] compressed = twoBlockStream();
+      final int secondBlock = LZ4BlockOutputStream.HEADER_LENGTH
+        + net.jpountz.util.SafeUtils.readIntLE(compressed, LZ4BlockOutputStream.MAGIC_LENGTH + 1);
+      ByteBuffer.wrap(compressed).order(ByteOrder.LITTLE_ENDIAN).putInt(secondBlock + LZ4BlockOutputStream.MAGIC_LENGTH + 5, originalLen);
+
+      LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(compressed));
+      byte[] first = new byte[64];
+      assertEquals(64, in.readNBytes(first, 0, 64));
+      assertThrows(IOException.class, () -> in.read(new byte[16]));
+      assertFailedStream(in);
+    }
   }
 }
