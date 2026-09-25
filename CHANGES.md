@@ -1,5 +1,8 @@
 # Change log
 
+*This changelog covers lz4-java 1.8.0 and earlier. For newer versions, see
+[GitHub Releases](https://github.com/yawkat/lz4-java/releases).*
+
 ## 1.8.0
 
 - Upgraded LZ4 to 1.9.3. Updated the JNI bindings. Minimum glibc version in GNU/Linux platforms: 2.17 on aarch64, 2.2.5 on amd64, 2.17 on ppc64le, 2.2 on s390x.

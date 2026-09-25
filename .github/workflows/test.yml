@@ -13,11 +13,17 @@ jobs:
   linux:
     name: Linux test
     runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
+      # Codecov upload via OIDC
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - runs-on: ubuntu-24.04
+            coverage: true
+            maven-flags: -Pcoverage
           - runs-on: ubuntu-24.04-arm
             # Azul Zulu 7 not available on Aarch64
             maven-flags: >-
@@ -60,3 +66,13 @@ jobs:
             -Dsurefire.reportFormat=plain \
             ${{ matrix.maven-flags }} \
             verify
+      - name: Upload coverage to Codecov
+        if: matrix.coverage
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: target/site/jacoco/jacoco.xml
+          disable_search: true
+          # OIDC tokens are not available to pull requests from other repositories, which use tokenless upload instead.
+          # Don't use head.repo.fork here: this repository is itself a fork, so that is always true.
+          use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          fail_ci_if_error: false
