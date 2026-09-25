@@ -48,8 +48,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
-import net.jpountz.xxhash.XXHashFactory;
-
 /**
  *
  */
@@ -866,6 +864,122 @@ public class LZ4FrameIOStreamTest {
     } finally {
       lz4File.delete();
     }
+  }
+
+  private static byte[] compressFrame(byte[] data, LZ4FrameOutputStream.FLG.Bits... bits) throws IOException {
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (OutputStream os = new LZ4FrameOutputStream(baos, LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB, bits)) {
+      os.write(data);
+    }
+    return baos.toByteArray();
+  }
+
+  private static byte[] concat(byte[]... arrays) {
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    for (byte[] a : arrays) {
+      baos.write(a, 0, a.length);
+    }
+    return baos.toByteArray();
+  }
+
+  private static void assertFailedStream(LZ4FrameInputStream is) throws IOException {
+    Assert.assertThrows(IOException.class, is::read);
+    Assert.assertThrows(IOException.class, () -> is.read(new byte[16]));
+    Assert.assertThrows(IOException.class, () -> is.skip(1));
+    Assert.assertThrows(IOException.class, is::readAllBytes);
+    Assert.assertThrows(IOException.class, () -> is.readNBytes(16));
+    Assert.assertEquals(0, is.available());
+    is.close();
+  }
+
+  @Test
+  public void testFailureIsStickyAfterDescriptorHashMismatch() throws IOException {
+    final byte[] frame1 = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    final byte[] frame2 = compressFrame("world".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    // magic (4), FLG, BD, then the header checksum
+    frame2[6] ^= 1;
+
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(concat(frame1, frame2)));
+    final byte[] first = new byte[5];
+    Assert.assertEquals(5, is.readNBytes(first, 0, 5));
+    Assert.assertArrayEquals("hello".getBytes("UTF-8"), first);
+    final IOException e = Assert.assertThrows(IOException.class, is::read);
+    Assert.assertEquals(LZ4FrameInputStream.DESCRIPTOR_HASH_MISMATCH, e.getMessage());
+    // must not go on to return the data of the rejected frame
+    assertFailedStream(is);
+  }
+
+  @Test
+  public void testFailureIsStickyAfterSkippableFrameAndCorruptHeader() throws IOException {
+    final byte[] skippable = new byte[8];
+    ByteBuffer.wrap(skippable).order(ByteOrder.LITTLE_ENDIAN).putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE).putInt(0);
+    final byte[] frame = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    frame[6] ^= 1;
+
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(concat(skippable, frame)));
+    Assert.assertThrows(IOException.class, is::read);
+    assertFailedStream(is);
+  }
+
+  @Test
+  public void testFailureIsStickyAfterBlockChecksumMismatch() throws IOException {
+    final byte[] frame = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE,
+        LZ4FrameOutputStream.FLG.Bits.BLOCK_CHECKSUM);
+    // the frame ends with the block checksum (4) and the end mark (4)
+    frame[frame.length - 5] ^= 1;
+
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame));
+    final IOException e = Assert.assertThrows(IOException.class, is::read);
+    Assert.assertEquals(LZ4FrameInputStream.BLOCK_HASH_MISMATCH, e.getMessage());
+    // must not silently drop the block and continue
+    assertFailedStream(is);
+  }
+
+  @Test
+  public void testMalformedFirstHeaderThrowsIOException() throws IOException {
+    final byte[] frame = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    // set the reserved bit 0 in FLG
+    frame[4] |= 1;
+
+    // the header is read lazily, so construction must not fail
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame));
+    Assert.assertThrows(IOException.class, is::read);
+    assertFailedStream(is);
+  }
+
+  @Test
+  public void testLinkedBlocksFirstHeaderThrowsIOException() throws IOException {
+    final byte[] frame = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
+    // version 01, BLOCK_INDEPENDENCE cleared (linked blocks), with a valid descriptor checksum
+    frame[4] = 0x40;
+    frame[6] = (byte) ((XXHashFactory.fastestInstance().hash32().hash(frame, 4, 2, 0) >> 8) & 0xFF);
+
+    // the header is read lazily, so construction must not fail
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame), true);
+    assertInvalidDescriptor(Assert.assertThrows(IOException.class, is::isExpectedContentSizeDefined));
+    Assert.assertThrows(IOException.class, is::getExpectedContentSize);
+    assertFailedStream(is);
+  }
+
+  @Test
+  public void testFailureIsStickyForExpectedContentSize() throws IOException {
+    final byte[] skippable = new byte[8];
+    ByteBuffer.wrap(skippable).order(ByteOrder.LITTLE_ENDIAN).putInt(LZ4FrameInputStream.MAGIC_SKIPPABLE_BASE).putInt(0);
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    try (OutputStream os = new LZ4FrameOutputStream(baos, LZ4FrameOutputStream.BLOCKSIZE.SIZE_64KB, 5L,
+        LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE, LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE)) {
+      os.write("hello".getBytes("UTF-8"));
+    }
+    final byte[] frame = baos.toByteArray();
+    // magic (4), FLG, BD, content size (8), then the header checksum
+    frame[14] ^= 1;
+
+    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(concat(skippable, frame)), true);
+    final IOException e = Assert.assertThrows(IOException.class, is::getExpectedContentSize);
+    Assert.assertEquals(LZ4FrameInputStream.DESCRIPTOR_HASH_MISMATCH, e.getMessage());
+    // must not report the content size of the rejected frame
+    Assert.assertThrows(IOException.class, is::isExpectedContentSizeDefined);
+    assertFailedStream(is);
   }
 
   private static byte[] frameHeader(int flg, int bd) {

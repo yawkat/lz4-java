@@ -39,6 +39,8 @@ import net.jpountz.xxhash.XXHashFactory;
  * {@link InputStream} implementation to decode data written with
  * {@link LZ4BlockOutputStream}. This class is not thread-safe and does not
  * support {@link #mark(int)}/{@link #reset()}.
+ * Once a read fails with an {@link IOException}, every later read or skip on
+ * this stream throws an {@link IOException} as well.
  * <p>Use {@link Builder#withAcceptOversizedBlocks(boolean)} only for trusted
  * inputs that may contain noncanonical legacy LZ4 blocks. Enabling it restores
  * acceptance of blocks whose compressed length is greater than or equal to the
@@ -57,6 +59,8 @@ public class LZ4BlockInputStream extends FilterInputStream {
   private int originalLen;
   private int o;
   private boolean finished;
+  // set once refill() fails; the stream is unusable afterwards
+  private IOException failure;
 
   /**
    * Creates a new LZ4 input stream to read from the specified underlying InputStream.
@@ -187,11 +191,15 @@ public class LZ4BlockInputStream extends FilterInputStream {
 
   @Override
   public int available() throws IOException {
+    if (failure != null) {
+      return 0;
+    }
     return originalLen - o;
   }
 
   @Override
   public int read() throws IOException {
+    ensureNotFailed();
     if (finished) {
       return -1;
     }
@@ -207,6 +215,7 @@ public class LZ4BlockInputStream extends FilterInputStream {
   @Override
   public int read(byte[] b, int off, int len) throws IOException {
     SafeUtils.checkRange(b, off, len);
+    ensureNotFailed();
     if (finished) {
       return -1;
     }
@@ -229,6 +238,7 @@ public class LZ4BlockInputStream extends FilterInputStream {
 
   @Override
   public long skip(long n) throws IOException {
+    ensureNotFailed();
     if (n <= 0 || finished) {
       return 0;
     }
@@ -243,10 +253,24 @@ public class LZ4BlockInputStream extends FilterInputStream {
     return skipped;
   }
 
+  private void ensureNotFailed() throws IOException {
+    if (failure != null) {
+      throw new IOException("Stream previously failed", failure);
+    }
+  }
+
   private void refill() throws IOException {
-    // Loop rather than recurse over empty blocks so that a long run of them cannot overflow the stack
-    while (!readBlock()) {
-      // empty block with stopOnEmptyBlock == false, continue with the next block
+    try {
+      // Loop rather than recurse over empty blocks so that a long run of them cannot overflow the stack
+      while (!readBlock()) {
+        // empty block with stopOnEmptyBlock == false, continue with the next block
+      }
+    } catch (IOException e) {
+      failure = e;
+      throw e;
+    } catch (RuntimeException e) {
+      failure = new IOException("Stream is corrupted", e);
+      throw failure;
     }
   }
 
