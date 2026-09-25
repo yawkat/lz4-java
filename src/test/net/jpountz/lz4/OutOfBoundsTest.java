@@ -22,7 +22,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -310,5 +312,224 @@ public class OutOfBoundsTest {
     decompressor.decompress(compressed, output);
 
     assertArrayEquals(new byte[output.length], output); // should be all zero
+  }
+
+  /**
+   * Buffer kinds for the {@link ByteBuffer} overloads of {@link LZ4SafeDecompressor}. The JNI decompressor takes
+   * separate branches for heap and direct buffers.
+   */
+  enum BufferKind {
+    HEAP,
+    /** Heap buffer with non-zero {@link ByteBuffer#arrayOffset()}. */
+    HEAP_SLICE,
+    DIRECT;
+
+    ByteBuffer wrap(byte[] data) {
+      ByteBuffer buffer;
+      switch (this) {
+        case HEAP:
+          return ByteBuffer.wrap(data.clone());
+        case HEAP_SLICE:
+          buffer = ByteBuffer.allocate(data.length + 5);
+          buffer.position(5);
+          buffer = buffer.slice();
+          break;
+        case DIRECT:
+          buffer = ByteBuffer.allocateDirect(data.length);
+          break;
+        default:
+          throw new AssertionError();
+      }
+      buffer.put(data);
+      buffer.clear();
+      return buffer;
+    }
+  }
+
+  /**
+   * Source and destination kinds to test: {@code {null, null}} for the {@code byte[]} overload, and every
+   * combination of {@link BufferKind}s.
+   */
+  private static List<BufferKind[]> bufferKinds() {
+    List<BufferKind[]> kinds = new ArrayList<>();
+    kinds.add(new BufferKind[]{null, null});
+    for (BufferKind srcKind : BufferKind.values()) {
+      for (BufferKind destKind : BufferKind.values()) {
+        kinds.add(new BufferKind[]{srcKind, destKind});
+      }
+    }
+    return kinds;
+  }
+
+  /**
+   * Decompresses {@code src} into {@code dest} using the given kinds (see {@link #bufferKinds()}). For buffers,
+   * the destination contents are copied back into {@code dest}, also if decompression fails.
+   */
+  private static int decompressInto(LZ4SafeDecompressor decompressor, BufferKind[] kinds, byte[] src,
+                                    byte[] dest, int destOff, int maxDestLen) {
+    if (kinds[1] == null) {
+      return decompressor.decompress(src, 0, src.length, dest, destOff, maxDestLen);
+    }
+    ByteBuffer srcBuf = kinds[0].wrap(src);
+    ByteBuffer destBuf = kinds[1].wrap(dest);
+    try {
+      int result = decompressor.decompress(srcBuf, 0, srcBuf.remaining(), destBuf, destOff, maxDestLen);
+      assertEquals(0, srcBuf.position());
+      assertEquals(0, destBuf.position());
+      return result;
+    } finally {
+      destBuf.duplicate().get(dest);
+    }
+  }
+
+  /**
+   * Decompresses {@code compressed} with every destination offset, padding and kind, and checks that the output
+   * matches the Java safe decompressor and that no bytes outside the output range are touched.
+   */
+  private static void checkSafeDecompression(LZ4SafeDecompressor decompressor, byte[] compressed) {
+    LZ4SafeDecompressor reference = LZ4Factory.safeInstance().safeDecompressor();
+    byte[] expected = reference.decompress(compressed, 1024);
+    assertArrayEquals(new byte[expected.length], expected); // should be all zero
+
+    int guard = 8;
+    for (int destOff : new int[]{0, 8}) {
+      for (int padding : new int[]{0, 64}) {
+        int maxDestLen = expected.length + padding;
+        for (BufferKind[] kinds : bufferKinds()) {
+          String msg = Arrays.toString(kinds) + " destOff=" + destOff + " padding=" + padding;
+          byte[] dest = new byte[destOff + maxDestLen + guard];
+          Arrays.fill(dest, (byte) 0x77);
+          assertEquals(expected.length, decompressInto(decompressor, kinds, compressed, dest, destOff, maxDestLen),
+            msg);
+          for (int i = 0; i < destOff; i++) {
+            assertEquals((byte) 0x77, dest[i], msg);
+          }
+          assertArrayEquals(expected, Arrays.copyOfRange(dest, destOff, destOff + expected.length), msg);
+          for (int i = destOff + maxDestLen; i < dest.length; i++) {
+            assertEquals((byte) 0x77, dest[i], msg);
+          }
+        }
+      }
+    }
+  }
+
+  static Stream<Object[]> copyBeyondOutputSafeInputs() {
+    return safeDecompressors()
+      .flatMap(decompressor ->
+        IntStream.range(0, 14).boxed().flatMap(dec ->
+          IntStream.range(dec, 14).mapToObj(len -> new Object[]{decompressor, dec.byteValue(), len})));
+  }
+
+  /**
+   * Like {@link #copyBeyondOutput}, but with non-zero destination offsets, larger destinations, and all buffer
+   * kinds. Note that the native decompressor decodes the {@code dec} match of this input in its safe loop, because
+   * too little input follows it; see {@link #matchInFastLoop} for the fast loop.
+   */
+  @ParameterizedTest
+  @MethodSource("copyBeyondOutputSafeInputs")
+  public void copyBeyondOutputSafe(LZ4SafeDecompressor decompressor, byte dec, int len) {
+    byte[] compressed = {
+      // padding frame (14 bytes)
+      (byte) 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      // copy len bytes (+ 4 MIN_MATCH) from -dec
+      (byte) len, dec, 0,
+      // padding frame (12 bytes)
+      (byte) 0xc0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    checkSafeDecompression(decompressor, compressed);
+  }
+
+  static Stream<Object[]> matchInFastLoopInputs() {
+    // match lengths up to 18 fit in the token, longer ones need an extra length byte
+    int[] matchLens = IntStream.concat(IntStream.rangeClosed(MIN_MATCH, 20), IntStream.of(36, 64)).toArray();
+    return safeDecompressors()
+      .flatMap(decompressor ->
+        IntStream.rangeClosed(0, 14).boxed().flatMap(dec ->
+          Arrays.stream(matchLens).mapToObj(matchLen -> new Object[]{decompressor, dec, matchLen})));
+  }
+
+  /**
+   * Matches with small (including 0) offsets, decoded by the fast loop of the native decompressor.
+   *
+   * <p>The fast loop of {@code LZ4_decompress_generic} in lz4.c decodes a sequence only if at least
+   * {@code FASTLOOP_SAFE_DISTANCE} (64) bytes of output space remain after the match, and (for short literal runs)
+   * at least 17 bytes of input remain after the token. The trailing run of 16 last literals uses an extra length
+   * byte, so the input after the match token is always long enough, and with 64 bytes of padding the output space
+   * is large enough too. Without padding, the match is decoded by the safe loop instead.
+   */
+  @ParameterizedTest
+  @MethodSource("matchInFastLoopInputs")
+  public void matchInFastLoop(LZ4SafeDecompressor decompressor, int dec, int matchLen) {
+    ByteArrayOutputStream inputWriter = new ByteArrayOutputStream();
+    int matchToken = Math.min(matchLen - MIN_MATCH, 15);
+    // 14 zero literals, then copy matchLen bytes from -dec
+    inputWriter.write(0xe0 | matchToken);
+    inputWriter.write(new byte[14], 0, 14);
+    inputWriter.write(dec);
+    inputWriter.write(0);
+    if (matchToken == 15) {
+      inputWriter.write(matchLen - MIN_MATCH - 15);
+    }
+    // 16 zero last literals
+    inputWriter.write(0xf0);
+    inputWriter.write(1);
+    inputWriter.write(new byte[16], 0, 16);
+
+    checkSafeDecompression(decompressor, inputWriter.toByteArray());
+  }
+
+  private static byte[] backReferenceInput(int literals, int offset) {
+    ByteArrayOutputStream inputWriter = new ByteArrayOutputStream();
+    // literals, then a match of MIN_MATCH bytes
+    inputWriter.write(literals << 4);
+    for (int i = 0; i < literals; i++) {
+      inputWriter.write('A');
+    }
+    inputWriter.write(offset);
+    inputWriter.write(offset >>> 8);
+    // 16 last literals, enough for the native decompressor to decode the match in its fast loop (see
+    // matchInFastLoop)
+    inputWriter.write(0xf0);
+    inputWriter.write(1);
+    for (int i = 0; i < 16; i++) {
+      inputWriter.write('B');
+    }
+    return inputWriter.toByteArray();
+  }
+
+  /**
+   * A match must not reference bytes before {@code destOff}, even if they are within the destination.
+   */
+  @ParameterizedTest
+  @MethodSource("safeDecompressors")
+  public void backReferenceBeforeDestOff(LZ4SafeDecompressor decompressor) {
+    int destOff = 8;
+    for (int literals : new int[]{1, 4, 8}) {
+      int outputLen = literals + MIN_MATCH + 16;
+      for (int padding : new int[]{0, 64}) {
+        int maxDestLen = outputLen + padding;
+        for (BufferKind[] kinds : bufferKinds()) {
+          // control: a match offset within the bytes written so far is fine
+          byte[] valid = backReferenceInput(literals, literals);
+          byte[] expected = new byte[outputLen];
+          LZ4Factory.safeInstance().safeDecompressor().decompress(valid, expected);
+          byte[] dest = new byte[destOff + maxDestLen];
+          assertEquals(outputLen, decompressInto(decompressor, kinds, valid, dest, destOff, maxDestLen));
+          assertArrayEquals(expected, Arrays.copyOfRange(dest, destOff, destOff + outputLen));
+
+          for (int offset : new int[]{literals + 1, literals + destOff, literals + destOff + 1, 1000}) {
+            String msg = Arrays.toString(kinds) + " literals=" + literals + " offset=" + offset + " padding=" + padding;
+            byte[] input = backReferenceInput(literals, offset);
+            byte[] failDest = new byte[destOff + maxDestLen];
+            Arrays.fill(failDest, (byte) 0x77);
+            assertThrows(LZ4Exception.class,
+              () -> decompressInto(decompressor, kinds, input, failDest, destOff, maxDestLen), msg);
+            for (int i = 0; i < destOff; i++) {
+              assertEquals((byte) 0x77, failDest[i], msg);
+            }
+          }
+        }
+      }
+    }
   }
 }
