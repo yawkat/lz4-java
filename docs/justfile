@@ -26,6 +26,7 @@ template NAME TAG: (repo TAG)
   import semver
   import mistune
   import os
+  import re
   import pygments
   import pygments.lexers
   import pygments.formatters
@@ -36,6 +37,20 @@ template NAME TAG: (repo TAG)
   semantic_versions.sort(reverse=True, key=lambda v: semver.VersionInfo.parse(v[1:]))
 
   selected_version_actual = '{{TAG}}' if '{{TAG}}' != '{{latest_version_name}}' else '{{latest_version}}'
+
+  def readme_source():
+    text = open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()
+    if '{{TAG}}' != '{{latest_version_name}}':
+      # The README badges show the state of the main branch. On pages for older versions, pin the Maven Central badge to
+      # that version and drop the others.
+      version = '{{TAG}}'[1:]
+      text = re.sub(
+          r'^\[!\[Maven Central\]\(https://img\.shields\.io/maven-central/v/([^/)]+)/([^/)]+)\)\]\([^)]*\)$',
+          lambda m: f'[![Maven Central](https://img.shields.io/badge/maven--central-v{version}-blue)]'
+                    f'(https://central.sonatype.com/artifact/{m[1]}/{m[2]}/{version})',
+          text, flags=re.M)
+      text = re.sub(r'^\[!\[(?!Maven Central\]).*\n', '', text, flags=re.M)
+    return text
 
   html_formatter = pygments.formatters.HtmlFormatter()
   class PygmentsRenderer(mistune.HTMLRenderer):
@@ -61,7 +76,7 @@ template NAME TAG: (repo TAG)
         selected_version='{{TAG}}',
         selected_version_actual=selected_version_actual,
         path_javadoc='{{path_javadoc}}',
-        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(open('{{build}}/repo/lz4-java-{{TAG}}/README.md').read()),
+        readme=lambda: mistune.create_markdown(renderer=PygmentsRenderer())(readme_source()),
         pygments_style=lambda: html_formatter.get_style_defs()
         ))
 
@@ -96,6 +111,13 @@ rewrite-version-links:
       html = html.replace('</title>', '</title><link rel="stylesheet" href="' + str(to_root) + '/common.css"><link rel="stylesheet" href="' + str(to_root) + '/javadoc.css">')
     p.write_text(html)
 
+# Publish the JaCoCo report of the working tree, if it was built with `./mvnw -Pcoverage verify`
+coverage:
+  if [ -f ../target/site/jacoco/jacoco.csv ]; then \
+    cp -r ../target/site/jacoco '{{build}}/site/{{latest_version_name}}/coverage' && \
+    python3 ../scripts/jacoco_summary.py ../target/site/jacoco/jacoco.csv --badge '{{build}}/site/{{latest_version_name}}/coverage/badge.json'; \
+  fi
+
 prepare:
   rm -rf '{{build}}/site'
   mkdir -p '{{build}}/site'
@@ -105,5 +127,5 @@ log:
   @echo "Available tags: {{all_versions}}"
   @echo "Current tag: {{latest_version}}"
 
-all: log prepare (version latest_version_name) && rewrite-version-links
+all: log prepare (version latest_version_name) && coverage rewrite-version-links
   set -e; for v in {{all_versions}}; do just 'all_versions={{all_versions}}' 'latest_version={{latest_version}}' version "$v"; done
