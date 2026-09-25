@@ -281,6 +281,7 @@ public class LZ4BlockInputStream extends FilterInputStream {
       if (check != 0) {
         throw new IOException("Stream is corrupted");
       }
+      o = 0;
       if (!stopOnEmptyBlock) {
         refill();
       } else {
