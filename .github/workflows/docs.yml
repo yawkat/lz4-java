@@ -10,6 +10,12 @@ on:
         type: string
         required: false
 
+permissions:
+  contents: read
+  # Needed by the "Check PR"/"Comment on PR" steps, which post the preview URL
+  # when the workflow is dispatched from a non-main branch that has an open PR
+  pull-requests: write
+
 jobs:
   build:
     name: Build documentation
@@ -31,7 +37,11 @@ jobs:
         run: sudo apt install -y just
       - name: Build documentation (explicit selected version)
         if: github.event_name == 'workflow_dispatch' && inputs.selected_version
-        run: cd docs && just latest_version=${{ inputs.selected_version }} all
+        env:
+          SELECTED_VERSION: ${{ inputs.selected_version }}
+        run: |
+          [[ "$SELECTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid selected_version: $SELECTED_VERSION" >&2; exit 1; }
+          cd docs && just latest_version="$SELECTED_VERSION" all
       - name: Build documentation
         if: github.event_name != 'workflow_dispatch' || !inputs.selected_version
         run: cd docs && just all
@@ -43,22 +53,25 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at --branch=main
-      - name: Publish preview
+      # Dispatch on main is a production rebuild; any other branch gives a preview deployment.
+      # wrangler-action runs the command without a shell, so the ref can't be passed via env var.
+      - name: Publish (manual dispatch)
         if: github.event_name != 'release'
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4
-        id: cf_publish_preview
+        id: cf_publish_dispatch
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at
+          command: pages deploy docs/target/site/ --project-name=lz4-java-yawk-at --branch=${{ github.ref_name }}
+      # Not on main: that deploy is production, and the only associated PR is an already-merged one.
       - name: Check PR
-        if: github.event_name != 'release'
+        if: github.event_name != 'release' && github.ref != 'refs/heads/main'
         uses: 8BitJonny/gh-get-current-pr@4056877062a1f3b624d5d4c2bedefa9cf51435c9 # 4.0.0
         id: pr
       - name: Comment on PR
         if: steps.pr.outputs.pr_found
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3
         with:
-          message: ":rocket: Preview deployed to ${{steps.cf_publish_preview.outputs.deployment-url}}"
+          message: ":rocket: Preview deployed to ${{steps.cf_publish_dispatch.outputs.deployment-url}}"
           comment-tag: deployment
           pr-number: "${{steps.pr.outputs.number}}"

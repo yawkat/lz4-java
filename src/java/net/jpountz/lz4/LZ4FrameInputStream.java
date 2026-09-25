@@ -16,6 +16,7 @@ package net.jpountz.lz4;
  * limitations under the License.
  */
 
+import net.jpountz.xxhash.StreamingXXHash32;
 import net.jpountz.xxhash.XXHash32;
 import net.jpountz.xxhash.XXHashFactory;
 
@@ -54,12 +55,18 @@ public class LZ4FrameInputStream extends FilterInputStream {
   private final ByteBuffer headerBuffer = ByteBuffer.wrap(headerArray).order(ByteOrder.LITTLE_ENDIAN);
   private final boolean readSingleFrame;
   private byte[] compressedBuffer;
-  private ByteBuffer buffer = null;
+  private ByteBuffer buffer = ByteBuffer.allocate(0);
   private byte[] rawBuffer = null;
   private int maxBlockSize = -1;
+  // allocated lazily, and reused across frames
+  private byte[] skipBuffer = null;
+  private StreamingXXHash32 streamHash = null;
   private long expectedContentSize = -1L;
   private long totalContentSize = 0L;
+  // true once a non-skippable frame header was read; buffer and frameInfo are non-null from then on
   private boolean firstFrameHeaderRead = false;
+  // true once any frame (skippable or not) was read; EOF is clean from then on
+  private boolean anyFrameRead = false;
 
   private LZ4FrameOutputStream.FrameInfo frameInfo = null;
 
@@ -138,7 +145,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
       do {
         final int mySize = in.read(readNumberBuff.array(), size, LZ4FrameOutputStream.INTEGER_BYTES - size);
         if (mySize < 0) {
-          if (firstFrameHeaderRead) {
+          if (anyFrameRead) {
             if (size > 0) {
               throw new IOException(PREMATURE_EOS);
             } else {
@@ -163,16 +170,19 @@ public class LZ4FrameInputStream extends FilterInputStream {
   }
 
   private void skippableFrame() throws IOException {
-    int skipSize = readInt(in);
-    final byte[] skipBuffer = new byte[1 << 10];
+    // the frame size is an unsigned 32-bit value
+    long skipSize = readInt(in) & 0xFFFFFFFFL;
+    if (skipBuffer == null) {
+      skipBuffer = new byte[1 << 10];
+    }
     while (skipSize > 0) {
-      final int mySize = in.read(skipBuffer, 0, Math.min(skipSize, skipBuffer.length));
+      final int mySize = in.read(skipBuffer, 0, (int) Math.min(skipSize, skipBuffer.length));
       if (mySize < 0) {
         throw new IOException(PREMATURE_EOS);
       }
       skipSize -= mySize;
     }
-    firstFrameHeaderRead = true;
+    anyFrameRead = true;
   }
 
   /**
@@ -199,7 +209,18 @@ public class LZ4FrameInputStream extends FilterInputStream {
     final LZ4FrameOutputStream.BD bd = LZ4FrameOutputStream.BD.fromByte(bdByte);
     headerBuffer.put(bdByte);
 
-    this.frameInfo = new LZ4FrameOutputStream.FrameInfo(flg, bd);
+    final StreamingXXHash32 frameStreamHash;
+    if (flg.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_CHECKSUM)) {
+      if (streamHash == null) {
+        streamHash = XXHashFactory.fastestInstance().newStreamingHash32(0);
+      } else {
+        streamHash.reset();
+      }
+      frameStreamHash = streamHash;
+    } else {
+      frameStreamHash = null;
+    }
+    this.frameInfo = new LZ4FrameOutputStream.FrameInfo(flg, bd, frameStreamHash);
 
     if (flg.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_SIZE)) {
       expectedContentSize = readLong(in);
@@ -219,11 +240,10 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
 
     maxBlockSize = frameInfo.getBD().getBlockMaximumSize();
-    compressedBuffer = new byte[maxBlockSize]; // Reused during different compressions
-    rawBuffer = new byte[maxBlockSize];
-    buffer = ByteBuffer.wrap(rawBuffer);
+    // the block buffers are allocated lazily in readBlock, and reused across blocks and frames
     buffer.limit(0);
     firstFrameHeaderRead = true;
+    anyFrameRead = true;
   }
 
   private final ByteBuffer readNumberBuff = ByteBuffer.allocate(LZ4FrameOutputStream.LONG_BYTES).order(ByteOrder.LITTLE_ENDIAN);
@@ -259,6 +279,10 @@ public class LZ4FrameInputStream extends FilterInputStream {
    * @throws IOException
    */
   private void readBlock() throws IOException {
+    if (frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_CHECKSUM) && streamHash == null) {
+      // the content checksum hash was released by close()
+      throw new IOException("Stream closed");
+    }
     int blockSize = readInt(in);
     final boolean compressed = (blockSize & LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK) == 0;
     blockSize &= ~LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK;
@@ -278,14 +302,24 @@ public class LZ4FrameInputStream extends FilterInputStream {
       return;
     }
 
+    if (blockSize > maxBlockSize) {
+      throw new IOException(String.format(Locale.ROOT, "Block size %s exceeded max: %s", blockSize, maxBlockSize));
+    }
+
+    // The buffers may be larger than maxBlockSize if a previous frame had a larger block size. Never shrink them.
+    if (rawBuffer == null || rawBuffer.length < maxBlockSize) {
+      rawBuffer = new byte[maxBlockSize];
+      buffer = ByteBuffer.wrap(rawBuffer);
+      buffer.limit(0); // don't expose buffer contents if this block fails
+    }
     final byte[] tmpBuffer; // Use a temporary buffer, potentially one used for compression
     if (compressed) {
+      if (compressedBuffer == null || compressedBuffer.length < maxBlockSize) {
+        compressedBuffer = new byte[maxBlockSize]; // Reused during different compressions
+      }
       tmpBuffer = compressedBuffer;
     } else {
       tmpBuffer = rawBuffer;
-    }
-    if (blockSize > maxBlockSize) {
-      throw new IOException(String.format(Locale.ROOT, "Block size %s exceeded max: %s", blockSize, maxBlockSize));
     }
 
     int offset = 0;
@@ -308,7 +342,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
     final int currentBufferSize;
     if (compressed) {
       try {
-        currentBufferSize = decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, 0, rawBuffer.length);
+        currentBufferSize = decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, 0, maxBlockSize);
       } catch (LZ4Exception e) {
         throw new IOException(e);
       }
@@ -391,7 +425,14 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
   @Override
   public void close() throws IOException {
-    super.close();
+    try {
+      super.close();
+    } finally {
+      if (streamHash != null) {
+        streamHash.close();
+        streamHash = null;
+      }
+    }
   }
 
   @Override

@@ -16,11 +16,17 @@ package net.jpountz.xxhash;
  * limitations under the License.
  */
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
 import net.jpountz.lz4.AbstractLZ4Test;
 import net.jpountz.util.SafeUtils;
 
+import org.junit.Assume;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -105,6 +111,22 @@ public class XXHash64Test extends AbstractLZ4Test {
   }
 
   @Test
+  public void testEmptyMappedBuffer() throws IOException {
+    // a zero-length mapping is a direct buffer with a NULL address
+    final Path file = Files.createTempFile("xxhash", ".dat");
+    try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+      final ByteBuffer buf = channel.map(FileChannel.MapMode.READ_WRITE, 0, 0);
+      final long seed = randomLong();
+      final long expected = XXHashFactory.safeInstance().hash64().hash(buf, 0, 0, seed);
+      for (int i = 0; i < 2; ++i) {
+        assertEquals(expected, XXHashFactory.nativeInstance().hash64().hash(buf, 0, 0, seed));
+      }
+    } finally {
+      Files.delete(file);
+    }
+  }
+
+  @Test
   public void testSafeUtilsRejectsNullEmptyRange() {
     assertThrows(NullPointerException.class, () -> SafeUtils.checkRange(null, 0, 0));
   }
@@ -159,6 +181,67 @@ public class XXHash64Test extends AbstractLZ4Test {
       assertEquals(off, copy.position());
       assertEquals(len, copy.remaining());
       assertEquals(hash.toString(), ref, h2);
+    }
+  }
+
+  private static final XXHashFactory[] FACTORIES = new XXHashFactory[] {
+    XXHashFactory.nativeInstance(),
+    XXHashFactory.unsafeInstance(),
+    XXHashFactory.safeInstance()
+  };
+
+  @Test
+  @Repeat(iterations = 20)
+  public void testStreamingSplitUpdates() {
+    final byte[] buf = new byte[randomIntBetween(0, 1000)];
+    for (int i = 0; i < buf.length; ++i) {
+      buf[i] = randomByte();
+    }
+    final long seed = randomLong();
+    final long ref = XXHashFactory.nativeInstance().hash64().hash(buf, 0, buf.length, seed);
+    // buffer fewer than 32 bytes first, then feed the remainder in one or more larger chunks
+    final int first = randomInt(Math.min(31, buf.length));
+    for (XXHashFactory factory : FACTORIES) {
+      final StreamingXXHash64 h = factory.newStreamingHash64(seed);
+      h.update(buf, 0, first);
+      int off = first;
+      while (off < buf.length) {
+        final int l = randomIntBetween(1, buf.length - off);
+        h.update(buf, off, l);
+        off += l;
+      }
+      assertEquals(h.toString(), ref, h.getValue());
+    }
+  }
+
+  @Test
+  public void testStreamingHugeUpdateWithBufferedBytes() {
+    // needs a ~2 GiB array, so only runs on request and with a large heap:
+    // mvn -Dlz4.test.huge=true -Dtest=XXHash*Test verify
+    Assume.assumeTrue(Boolean.getBoolean("lz4.test.huge"));
+    Assume.assumeTrue(Runtime.getRuntime().maxMemory() > (3L << 30));
+    final byte[] big = new byte[Integer.MAX_VALUE - 8];
+    for (int i = 0; i < 4096; ++i) {
+      big[randomInt(big.length - 1)] = randomByte();
+    }
+    final byte[] small = new byte[31];
+    for (int i = 0; i < small.length; ++i) {
+      small[i] = randomByte();
+    }
+    final long seed = randomLong();
+
+    // reference: split so that memSize + len cannot overflow
+    final StreamingXXHash64 ref = XXHashFactory.nativeInstance().newStreamingHash64(seed);
+    ref.update(small, 0, small.length);
+    ref.update(big, 0, 32);
+    ref.update(big, 32, big.length - 32);
+    final long expected = ref.getValue();
+
+    for (XXHashFactory factory : FACTORIES) {
+      final StreamingXXHash64 h = factory.newStreamingHash64(seed);
+      h.update(small, 0, small.length);
+      h.update(big, 0, big.length);
+      assertEquals(h.toString(), expected, h.getValue());
     }
   }
 
