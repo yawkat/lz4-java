@@ -92,7 +92,7 @@ jobs:
               package
 
       - name: Upload native library
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: natives-linux-${{ matrix.arch }}
           path: target/classes/net/jpountz/util/linux/*/liblz4-java.so
@@ -148,7 +148,7 @@ jobs:
             verify
 
       - name: Upload native library
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: natives-darwin-${{ matrix.arch }}
           path: target/classes/net/jpountz/util/darwin/${{ matrix.arch }}/liblz4-java.dylib
@@ -202,7 +202,7 @@ jobs:
             verify
 
       - name: Upload native library
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: natives-windows-amd64
           path: target/classes/net/jpountz/util/windows/amd64/liblz4-java.dll
@@ -348,7 +348,7 @@ jobs:
         if: env.PUBLISH != 'true'
 
       - name: Upload final JAR
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: lz4-java-all-platforms
           path: target/lz4-java-*.jar
