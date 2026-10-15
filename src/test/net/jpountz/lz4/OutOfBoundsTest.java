@@ -151,6 +151,37 @@ public class OutOfBoundsTest {
 
   @ParameterizedTest
   @MethodSource("decompressorsWithLength")
+  public void byteBufferSourceOffsetIgnoresPosition(LZ4DecompressorWithLength decompressor) {
+    LZ4Factory factory = LZ4Factory.safeInstance();
+    byte[] original = new byte[64];
+    for (int i = 0; i < original.length; i++) {
+      original[i] = (byte) (i % 7);
+    }
+    byte[] compressed = new LZ4CompressorWithLength(factory.fastCompressor()).compress(original);
+    int srcOff = 3;
+
+    for (boolean direct : new boolean[] {false, true}) {
+      ByteBuffer src = direct
+        ? ByteBuffer.allocateDirect(srcOff + compressed.length)
+        : ByteBuffer.allocate(srcOff + compressed.length);
+      src.position(srcOff);
+      src.put(compressed);
+      src.clear();
+      for (int position : new int[] {0, 1, srcOff, src.limit()}) {
+        src.position(position);
+        ByteBuffer dest = direct ? ByteBuffer.allocateDirect(original.length) : ByteBuffer.allocate(original.length);
+        decompressor.decompress(src, srcOff, dest, 0);
+        assertEquals(position, src.position());
+        assertEquals(0, dest.position());
+        byte[] decompressed = new byte[original.length];
+        dest.get(decompressed);
+        assertArrayEquals(original, decompressed);
+      }
+    }
+  }
+
+  @ParameterizedTest
+  @MethodSource("decompressorsWithLength")
   public void destinationBufferLimitsDecompressedLength(LZ4DecompressorWithLength decompressor) {
     LZ4Factory factory = LZ4Factory.safeInstance();
     byte[] compressed = new LZ4CompressorWithLength(factory.fastCompressor()).compress(new byte[16]);
