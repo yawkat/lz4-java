@@ -557,6 +557,26 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
     in.close();
   }
 
+  @Test
+  public void testRejectsLz4CompressedLengthAboveCompressBoundInOversizedBlocksMode() {
+    final int originalLen = 16;
+    for (int compressedLen : new int[] {LZ4Utils.maxCompressedLength(originalLen) + 1, Integer.MAX_VALUE}) {
+      // header only: the block is rejected before its payload or checksum is read
+      final byte[] header = ByteBuffer.allocate(LZ4BlockOutputStream.HEADER_LENGTH)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .put(LZ4BlockOutputStream.MAGIC)
+        .put((byte) (LZ4BlockOutputStream.COMPRESSION_METHOD_LZ4 | 0x0F))
+        .putInt(compressedLen)
+        .putInt(originalLen)
+        .array();
+      final LZ4BlockInputStream in = lz4BlockInputStreamBuilder()
+        .withAcceptOversizedBlocks(true)
+        .build(new ByteArrayInputStream(header));
+      final IOException e = assertThrows(IOException.class, in::read);
+      assertEquals("Stream is corrupted", e.getMessage());
+    }
+  }
+
   // Many empty blocks followed by a regular stream, as could be produced by a malicious peer
   private static byte[] emptyBlocksFollowedBy(int emptyBlocks, byte[] tail) {
     final byte[] emptyBlock = new byte[LZ4BlockOutputStream.HEADER_LENGTH];

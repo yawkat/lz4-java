@@ -44,7 +44,9 @@ import net.jpountz.xxhash.XXHashFactory;
  * <p>Use {@link Builder#withAcceptOversizedBlocks(boolean)} only for trusted
  * inputs that may contain noncanonical legacy LZ4 blocks. Enabling it restores
  * acceptance of blocks whose compressed length is greater than or equal to the
- * original length, which may permit large attacker-controlled allocations.</p>
+ * original length, which may permit large attacker-controlled allocations.
+ * Even then, blocks whose compressed length exceeds the LZ4 compress bound of
+ * their original length are rejected.</p>
  * @see LZ4BlockOutputStream
  */
 public class LZ4BlockInputStream extends FilterInputStream {
@@ -310,7 +312,9 @@ public class LZ4BlockInputStream extends FilterInputStream {
       || (originalLen == 0 && compressedLen != 0)
       || (originalLen != 0 && compressedLen == 0)
       || (compressionMethod == COMPRESSION_METHOD_RAW && originalLen != compressedLen)
-      || (compressionMethod == COMPRESSION_METHOD_LZ4 && !acceptOversizedBlocks && compressedLen >= originalLen)) {
+      || (compressionMethod == COMPRESSION_METHOD_LZ4 && !acceptOversizedBlocks && compressedLen >= originalLen)
+      // even an oversized LZ4 block cannot be larger than the LZ4 compress bound of its original length
+      || (compressionMethod == COMPRESSION_METHOD_LZ4 && compressedLen > LZ4Utils.maxCompressedLength(originalLen))) {
       throw new IOException("Stream is corrupted");
     }
     if (originalLen == 0 && compressedLen == 0) {
@@ -436,7 +440,9 @@ public class LZ4BlockInputStream extends FilterInputStream {
      * Registers whether the builder should accept oversized blocks whose
      * compressed length is greater than or equal to the original length.
      * <p>Only enable this for trusted inputs. Accepting such blocks may permit
-     * large attacker-controlled allocations.</p>
+     * large attacker-controlled allocations. Blocks whose compressed length
+     * exceeds the LZ4 compress bound of their original length are rejected
+     * even when this is enabled.</p>
      *
      * @param acceptOversizedBlocks whether oversized blocks should be accepted
      * @return current builder instance
