@@ -180,6 +180,13 @@ public class LZ4DecompressorWithLength {
     }
   }
 
+  private static void checkCompressedLength(int compressedLength) {
+    if (compressedLength < 4) {
+      throw new LZ4Exception("Compressed length " + compressedLength
+          + " is too short for the 4-byte length prefix");
+    }
+  }
+
   private static int checkWritten(int written, int declared) {
     if (written != declared) {
       throw new LZ4Exception("Decompressed " + written
@@ -220,6 +227,8 @@ public class LZ4DecompressorWithLength {
     if (safeDecompressor != null) {
       return decompress(src, srcOff, src.length - srcOff, dest, destOff);
     }
+    SafeUtils.checkRange(src, srcOff, 0);
+    checkCompressedLength(src.length - srcOff);
     final int destLen = getDecompressedLength(src, srcOff);
     SafeUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.length - destOff);
@@ -246,6 +255,8 @@ public class LZ4DecompressorWithLength {
     if (safeDecompressor == null) {
       return decompress(src, srcOff, dest, destOff);
     }
+    SafeUtils.checkRange(src, srcOff, srcLen);
+    checkCompressedLength(srcLen);
     final int destLen = getDecompressedLength(src, srcOff);
     SafeUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.length - destOff);
@@ -284,6 +295,8 @@ public class LZ4DecompressorWithLength {
     if (safeDecompressor != null) {
       return decompress(src, srcOff, src.length - srcOff);
     }
+    SafeUtils.checkRange(src, srcOff, 0);
+    checkCompressedLength(src.length - srcOff);
     final int destLen = getDecompressedLength(src, srcOff);
     checkDecompressedLength(destLen, src.length - srcOff - 4);
     return fastDecompressor.decompress(src, srcOff + 4, destLen);
@@ -310,6 +323,7 @@ public class LZ4DecompressorWithLength {
       return decompress(src, srcOff);
     }
     SafeUtils.checkRange(src, srcOff, srcLen);
+    checkCompressedLength(srcLen);
     final int destLen = getDecompressedLength(src, srcOff);
     checkDecompressedLength(destLen, srcLen - 4);
     final byte[] dest = new byte[destLen];
@@ -330,6 +344,7 @@ public class LZ4DecompressorWithLength {
    *     of <code>dest</code> after its position may have been partially overwritten
    */
   public void decompress(ByteBuffer src, ByteBuffer dest) {
+    checkCompressedLength(src.remaining());
     final int destLen = getDecompressedLength(src, src.position());
     checkDestinationLength(destLen, dest.remaining());
     if (safeDecompressor == null) {
@@ -363,6 +378,8 @@ public class LZ4DecompressorWithLength {
     if (safeDecompressor != null) {
       return decompress(src, srcOff, src.remaining() - srcOff, dest, destOff);
     }
+    ByteBufferUtils.checkRange(src, srcOff, 0);
+    checkCompressedLength(src.limit() - srcOff);
     final int destLen = getDecompressedLength(src, srcOff);
     ByteBufferUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.capacity() - destOff);
@@ -390,6 +407,8 @@ public class LZ4DecompressorWithLength {
     if (safeDecompressor == null) {
       return decompress(src, srcOff, dest, destOff);
     }
+    ByteBufferUtils.checkRange(src, srcOff, srcLen);
+    checkCompressedLength(srcLen);
     final int destLen = getDecompressedLength(src, srcOff);
     ByteBufferUtils.checkRange(dest, destOff, 0);
     checkDestinationLength(destLen, dest.capacity() - destOff);

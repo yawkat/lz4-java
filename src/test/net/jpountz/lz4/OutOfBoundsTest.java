@@ -151,6 +151,59 @@ public class OutOfBoundsTest {
 
   @ParameterizedTest
   @MethodSource("decompressorsWithLength")
+  public void inputShorterThanLengthPrefix(LZ4DecompressorWithLength decompressor) {
+    for (int i = 0; i < 4; i++) {
+      int length = i;
+      byte[] src = new byte[length];
+      Arrays.fill(src, (byte) 1);
+      // the same bytes at an offset
+      byte[] padded = new byte[2 + length];
+      System.arraycopy(src, 0, padded, 2, length);
+      byte[] dest = new byte[16];
+
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src, 0));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(padded, 2, length));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src, dest));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src, 0, dest, 0));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(padded, 2, length, dest, 0));
+
+      for (boolean direct : new boolean[] {false, true}) {
+        ByteBuffer srcBuffer = direct ? ByteBuffer.allocateDirect(length) : ByteBuffer.allocate(length);
+        srcBuffer.put(src).flip();
+        ByteBuffer paddedBuffer = direct ? ByteBuffer.allocateDirect(padded.length) : ByteBuffer.allocate(padded.length);
+        paddedBuffer.put(padded).flip();
+        ByteBuffer destBuffer = direct ? ByteBuffer.allocateDirect(16) : ByteBuffer.allocate(16);
+
+        assertThrows(LZ4Exception.class, () -> decompressor.decompress(srcBuffer, destBuffer));
+        assertEquals(0, srcBuffer.position());
+        assertEquals(0, destBuffer.position());
+        assertThrows(LZ4Exception.class, () -> decompressor.decompress(srcBuffer, 0, destBuffer, 0));
+        assertThrows(LZ4Exception.class, () -> decompressor.decompress(paddedBuffer, 2, length, destBuffer, 0));
+      }
+    }
+  }
+
+  @Test
+  public void safeInputShorterThanLengthPrefixWithTrailingBytes() {
+    LZ4DecompressorWithLength decompressor =
+      new LZ4DecompressorWithLength(LZ4Factory.safeInstance().safeDecompressor());
+    // srcLen bytes are too short for the length prefix, even though src has more bytes after them
+    byte[] src = new byte[8];
+    byte[] dest = new byte[16];
+    for (int srcLen = 0; srcLen < 4; srcLen++) {
+      int len = srcLen;
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src, 0, len));
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(src, 0, len, dest, 0));
+      assertThrows(LZ4Exception.class,
+        () -> decompressor.decompress(ByteBuffer.wrap(src), 0, len, ByteBuffer.wrap(dest), 0));
+      ByteBuffer limited = ByteBuffer.wrap(src, 0, len);
+      assertThrows(LZ4Exception.class, () -> decompressor.decompress(limited, ByteBuffer.wrap(dest)));
+    }
+  }
+
+  @ParameterizedTest
+  @MethodSource("decompressorsWithLength")
   public void destinationBufferLimitsDecompressedLength(LZ4DecompressorWithLength decompressor) {
     LZ4Factory factory = LZ4Factory.safeInstance();
     byte[] compressed = new LZ4CompressorWithLength(factory.fastCompressor()).compress(new byte[16]);
