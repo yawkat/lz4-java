@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import net.jpountz.util.ByteBufferUtils;
 import net.jpountz.util.SafeUtils;
 
+import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_RATIO;
+
 /**
  * Convenience class to decompress data compressed by {@link LZ4CompressorWithLength}.
  * This decompressor is NOT compatible with any other compressors in lz4-java
@@ -39,8 +41,6 @@ import net.jpountz.util.SafeUtils;
 
 public class LZ4DecompressorWithLength {
 
-  // Each LZ4 match-length extension byte adds at most 255 decompressed bytes.
-  private static final int MAX_COMPRESSION_RATIO = 255;
   private static final int DEFAULT_MAX_DECOMPRESSED_LENGTH = Integer.getInteger(
       "net.jpountz.lz4.LZ4DecompressorWithLength.maxDecompressedLength", 64 * 1024 * 1024);
 

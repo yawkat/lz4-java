@@ -23,6 +23,7 @@ import static net.jpountz.lz4.LZ4BlockOutputStream.DEFAULT_SEED;
 import static net.jpountz.lz4.LZ4BlockOutputStream.HEADER_LENGTH;
 import static net.jpountz.lz4.LZ4BlockOutputStream.MAGIC;
 import static net.jpountz.lz4.LZ4BlockOutputStream.MAGIC_LENGTH;
+import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_RATIO;
 
 import java.io.EOFException;
 import java.io.FilterInputStream;
@@ -41,12 +42,11 @@ import net.jpountz.xxhash.XXHashFactory;
  * support {@link #mark(int)}/{@link #reset()}.
  * Once a read fails with an {@link IOException}, every later read or skip on
  * this stream throws an {@link IOException} as well.
- * <p>Use {@link Builder#withAcceptOversizedBlocks(boolean)} only for trusted
- * inputs that may contain noncanonical legacy LZ4 blocks. Enabling it restores
+ * <p>Use {@link Builder#withAcceptOversizedBlocks(boolean)} only for inputs
+ * that may contain noncanonical legacy LZ4 blocks. Enabling it restores
  * acceptance of blocks whose compressed length is greater than or equal to the
- * original length, which may permit large attacker-controlled allocations.
- * Even then, blocks whose compressed length exceeds the LZ4 compress bound of
- * their original length are rejected.</p>
+ * original length. Even then, blocks whose compressed length exceeds the LZ4
+ * compress bound of their original length are rejected.</p>
  * @see LZ4BlockOutputStream
  */
 public class LZ4BlockInputStream extends FilterInputStream {
@@ -273,6 +273,10 @@ public class LZ4BlockInputStream extends FilterInputStream {
     } catch (RuntimeException e) {
       failure = new IOException("Stream is corrupted", e);
       throw failure;
+    } catch (Error e) {
+      // e.g. OutOfMemoryError: the block was partially consumed, so the stream cannot continue
+      failure = new IOException(e);
+      throw e;
     }
   }
 
@@ -314,7 +318,9 @@ public class LZ4BlockInputStream extends FilterInputStream {
       || (compressionMethod == COMPRESSION_METHOD_RAW && originalLen != compressedLen)
       || (compressionMethod == COMPRESSION_METHOD_LZ4 && !acceptOversizedBlocks && compressedLen >= originalLen)
       // even an oversized LZ4 block cannot be larger than the LZ4 compress bound of its original length
-      || (compressionMethod == COMPRESSION_METHOD_LZ4 && compressedLen > LZ4Utils.maxCompressedLength(originalLen))) {
+      || (compressionMethod == COMPRESSION_METHOD_LZ4 && compressedLen > LZ4Utils.maxCompressedLength(originalLen))
+      // nor can it decompress to more than the maximum compression ratio allows
+      || (compressionMethod == COMPRESSION_METHOD_LZ4 && originalLen > (long) compressedLen * MAX_COMPRESSION_RATIO)) {
       throw new IOException("Stream is corrupted");
     }
     if (originalLen == 0 && compressedLen == 0) {
@@ -328,18 +334,19 @@ public class LZ4BlockInputStream extends FilterInputStream {
       finished = true;
       return true;
     }
-    if (buffer.length < originalLen) {
-      buffer = new byte[Math.max(originalLen, buffer.length * 3 / 2)];
-    }
+    // The lengths come from the untrusted header, so only allocate as the block data actually arrives
+    final int maxBlockSize = 1 << compressionLevel;
     switch (compressionMethod) {
       case COMPRESSION_METHOD_RAW:
-        readFully(buffer, originalLen);
+        buffer = LZ4Utils.readFullyGrowing(in, buffer, originalLen, maxBlockSize);
         break;
       case COMPRESSION_METHOD_LZ4:
-        if (compressedBuffer.length < compressedLen) {
-          compressedBuffer = new byte[Math.max(compressedLen, compressedBuffer.length * 3 / 2)];
+        compressedBuffer = LZ4Utils.readFullyGrowing(in, compressedBuffer, compressedLen,
+          LZ4Utils.maxCompressedLength(maxBlockSize));
+        // originalLen is at most MAX_COMPRESSION_RATIO times the compressed data that was read
+        if (buffer.length < originalLen) {
+          buffer = new byte[LZ4Utils.grownLength(buffer.length, originalLen, maxBlockSize)];
         }
-        readFully(compressedBuffer, compressedLen);
         try {
           if (fastDecompressor == null) {
             final int decompressedLen = safeDecompressor.decompress(compressedBuffer, 0, compressedLen, buffer, 0, originalLen);
@@ -368,8 +375,8 @@ public class LZ4BlockInputStream extends FilterInputStream {
     return true;
   }
 
-  // Like readFully(), except it signals incomplete reads by returning
-  // the number of bytes read (less than len) instead of throwing EOFException.
+  // Reads up to len bytes, and signals incomplete reads by returning
+  // the number of bytes read (less than len).
   private int tryReadFully(byte[] b, int len) throws IOException {
     int read = 0;
     while (read < len) {
@@ -380,12 +387,6 @@ public class LZ4BlockInputStream extends FilterInputStream {
       read += r;
     }
     return read;
-  }
-
-  private void readFully(byte[] b, int len) throws IOException {
-    if (tryReadFully(b, len) != len) {
-      throw new EOFException("Stream ended prematurely");
-    }
   }
 
   @Override
@@ -439,10 +440,9 @@ public class LZ4BlockInputStream extends FilterInputStream {
     /**
      * Registers whether the builder should accept oversized blocks whose
      * compressed length is greater than or equal to the original length.
-     * <p>Only enable this for trusted inputs. Accepting such blocks may permit
-     * large attacker-controlled allocations. Blocks whose compressed length
-     * exceeds the LZ4 compress bound of their original length are rejected
-     * even when this is enabled.</p>
+     * <p>Only enable this for inputs that may contain such noncanonical legacy
+     * blocks. Blocks whose compressed length exceeds the LZ4 compress bound of
+     * their original length are rejected even when this is enabled.</p>
      *
      * @param acceptOversizedBlocks whether oversized blocks should be accepted
      * @return current builder instance

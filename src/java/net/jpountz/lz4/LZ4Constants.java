@@ -31,6 +31,9 @@ enum LZ4Constants {
 
   static final int MIN_MATCH = 4;
 
+  // Each LZ4 match-length extension byte adds at most 255 decompressed bytes.
+  static final int MAX_COMPRESSION_RATIO = 255;
+
   static final int HASH_LOG = MEMORY_USAGE - 2;
   static final int HASH_TABLE_SIZE = 1 << HASH_LOG;
 

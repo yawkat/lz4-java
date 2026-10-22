@@ -24,10 +24,12 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.function.Consumer;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
@@ -36,7 +38,9 @@ import java.util.zip.Checksum;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import net.jpountz.xxhash.XXHashFactory;
 
+import org.junit.Assume;
 import org.junit.Test;
+import org.junit.function.ThrowingRunnable;
 import static org.junit.Assert.*;
 
 import com.carrotsearch.randomizedtesting.annotations.Repeat;
@@ -675,6 +679,125 @@ public class LZ4BlockStreamingTest extends AbstractLZ4Test {
       assertEquals(64, in.readNBytes(first, 0, 64));
       assertThrows(IOException.class, () -> in.read(new byte[16]));
       assertFailedStream(in);
+    }
+  }
+
+  private static byte[] blockHeader(int compressionMethod, int compressedLen, int originalLen) {
+    return ByteBuffer.allocate(LZ4BlockOutputStream.HEADER_LENGTH)
+      .order(ByteOrder.LITTLE_ENDIAN)
+      .put(LZ4BlockOutputStream.MAGIC)
+      .put((byte) (compressionMethod | 0x0F))
+      .putInt(compressedLen)
+      .putInt(originalLen)
+      .array();
+  }
+
+  /**
+   * Runs the given action and returns the number of bytes allocated by the current thread while doing so.
+   */
+  private static long allocatedBytes(ThrowingRunnable action) throws Throwable {
+    Assume.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean);
+    final com.sun.management.ThreadMXBean threadMXBean = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+    Assume.assumeTrue(threadMXBean.isThreadAllocatedMemorySupported() && threadMXBean.isThreadAllocatedMemoryEnabled());
+
+    final long threadId = Thread.currentThread().getId();
+    long allocated = 0;
+    // the first iteration is a warm-up, so that one-time allocations (e.g. class initialization) are not counted
+    for (int i = 0; i < 2; i++) {
+      final long allocatedBefore = threadMXBean.getThreadAllocatedBytes(threadId);
+      action.run();
+      allocated = threadMXBean.getThreadAllocatedBytes(threadId) - allocatedBefore;
+    }
+    return allocated;
+  }
+
+  @Test
+  public void testTruncatedBlockDoesNotAllocateBlockSize() throws Throwable {
+    final int maxBlockSize = 1 << 25;
+    final byte[][] headers = {
+      blockHeader(LZ4BlockOutputStream.COMPRESSION_METHOD_LZ4, maxBlockSize - 1, maxBlockSize),
+      blockHeader(LZ4BlockOutputStream.COMPRESSION_METHOD_RAW, maxBlockSize, maxBlockSize),
+    };
+    for (byte[] header : headers) {
+      // a header claiming a 32 MiB block, followed by a little payload and then the end of the stream
+      final byte[] truncated = Arrays.copyOf(header, header.length + 1000);
+      final long allocated = allocatedBytes(() -> assertThrows(EOFException.class,
+        () -> lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(truncated)).read()));
+      assertTrue("Allocated " + allocated + " bytes", allocated < (1 << 20));
+    }
+  }
+
+  @Test
+  public void testRejectsOriginalLengthAboveMaxCompressionRatio() {
+    final byte[] header = blockHeader(LZ4BlockOutputStream.COMPRESSION_METHOD_LZ4, 4, 4 * 255 + 1);
+    final LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(header));
+    final IOException e = assertThrows(IOException.class, in::read);
+    assertEquals("Stream is corrupted", e.getMessage());
+
+    // at the maximum compression ratio, the header is accepted, and reading fails only because the payload is missing
+    final byte[] maxRatioHeader = blockHeader(LZ4BlockOutputStream.COMPRESSION_METHOD_LZ4, 4, 4 * 255);
+    final LZ4BlockInputStream maxRatioIn = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(maxRatioHeader));
+    assertThrows(EOFException.class, maxRatioIn::read);
+  }
+
+  @Test
+  public void testMaximallyCompressibleBlocks() throws IOException {
+    final int blockSize = 1 << 25;
+    final byte[] data = new byte[blockSize + 12345];
+    for (LZ4Compressor compressor : new LZ4Compressor[] {
+      LZ4Factory.fastestJavaInstance().fastCompressor(),
+      LZ4Factory.fastestJavaInstance().highCompressor(17),
+    }) {
+      final ByteArrayOutputStream out = new ByteArrayOutputStream();
+      try (LZ4BlockOutputStream os = new LZ4BlockOutputStream(out, blockSize, compressor)) {
+        os.write(data);
+      }
+      try (LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(out.toByteArray()))) {
+        assertArrayEquals(data, in.readAllBytes());
+      }
+    }
+  }
+
+  @Test
+  public void testGrowingBlocksAllocation() throws Throwable {
+    // blocks that are each slightly larger than the previous one, as written by flushing growing messages
+    final int blockCount = 256;
+    final int baseSize = 256 << 10;
+    final byte[] data = new byte[baseSize + blockCount];
+    new Random(42).nextBytes(data);
+    for (boolean compressible : new boolean[] {true, false}) {
+      final byte[] blockData = compressible ? new byte[data.length] : data;
+      if (compressible) {
+        // compressible, but with a compressed length that grows with the block
+        for (int i = 0; i < blockData.length; i++) {
+          blockData[i] = (byte) (data[i] & 1);
+        }
+      }
+      final ByteArrayOutputStream out = new ByteArrayOutputStream();
+      long expectedLength = 0;
+      try (LZ4BlockOutputStream os = new LZ4BlockOutputStream(out, 1 << 20,
+        LZ4Factory.fastestJavaInstance().fastCompressor(), XXHashFactory.fastestInstance().newStreamingHash32(LZ4BlockOutputStream.DEFAULT_SEED).asChecksum(), true)) {
+        for (int i = 0; i < blockCount; i++) {
+          os.write(blockData, 0, baseSize + i);
+          os.flush();
+          expectedLength += baseSize + i;
+        }
+      }
+      final byte[] compressed = out.toByteArray();
+      final byte[] buf = new byte[1 << 10];
+      final long finalExpectedLength = expectedLength;
+      final long allocated = allocatedBytes(() -> {
+        long length = 0;
+        try (LZ4BlockInputStream in = lz4BlockInputStreamBuilder().build(new ByteArrayInputStream(compressed))) {
+          int n;
+          while ((n = in.read(buf)) != -1) {
+            length += n;
+          }
+        }
+        assertEquals(finalExpectedLength, length);
+      });
+      // the buffers grow geometrically, rather than being reallocated for every larger block
+      assertTrue("Allocated " + allocated + " bytes", allocated < 3 * (1L << 20));
     }
   }
 }
