@@ -649,8 +649,10 @@ public class LZ4FrameIOStreamTest {
 
   @Test
   public void testBlockBuffersReusedAcrossFrames() throws IOException {
-    final byte[] data = new byte[] {1, 2, 3};
-    final int frameCount = 2000;
+    // incompressible, so that the compressed block is large enough to need the full 4 MiB output buffer
+    final byte[] data = new byte[20000];
+    new Random(42).nextBytes(data);
+    final int frameCount = 200;
     final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     for (int i = 0; i < frameCount; i++) {
       writeFrame(baos, BD_4MB, new byte[0]);
@@ -658,8 +660,40 @@ public class LZ4FrameIOStreamTest {
       writeFrame(baos, FLG_BLOCK_INDEPENDENCE | FLG_CONTENT_CHECKSUM, BD_4MB, data, true);
     }
     final long allocated = allocatedBytesForDecode(baos.toByteArray(), (long) frameCount * data.length);
-    // one raw and one compressed buffer of 4 MiB each, plus some slack
-    Assert.assertTrue("Allocated " + allocated + " bytes", allocated < 3 * (8L << 20));
+    // one 4 MiB output buffer and one compressed buffer, plus some slack per frame. Without reuse, this would be
+    // frameCount * 4 MiB.
+    Assert.assertTrue("Allocated " + allocated + " bytes", allocated < (4L << 20) + frameCount * 8192L);
+  }
+
+  @Test
+  public void testGrowingBlocksAllocation() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
+    // blocks that are each slightly larger than the previous one, as written by flushing growing messages
+    final int blockCount = 256;
+    final int baseSize = 256 << 10;
+    final byte[] data = new byte[baseSize + blockCount];
+    new Random(42).nextBytes(data);
+    for (boolean compress : new boolean[] {true, false}) {
+      final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      baos.write(frameHeader(FLG_BLOCK_INDEPENDENCE, BD_4MB), 0, 7);
+      final ByteBuffer intBuffer = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
+      long expectedLength = 0;
+      for (int i = 0; i < blockCount; i++) {
+        final int size = baseSize + i;
+        final byte[] block = compress
+            ? LZ4Factory.fastestJavaInstance().fastCompressor().compress(data, 0, size)
+            : Arrays.copyOf(data, size);
+        intBuffer.putInt(0, compress ? block.length : block.length | LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK);
+        baos.write(intBuffer.array(), 0, 4);
+        baos.write(block, 0, block.length);
+        expectedLength += size;
+      }
+      intBuffer.putInt(0, 0); // EndMark
+      baos.write(intBuffer.array(), 0, 4);
+      final long allocated = allocatedBytesForDecode(baos.toByteArray(), expectedLength);
+      // the buffers grow geometrically, rather than being reallocated for every larger block
+      Assert.assertTrue("Allocated " + allocated + " bytes", allocated < 3 * (4L << 20));
+    }
   }
 
   @Test
@@ -675,6 +709,67 @@ public class LZ4FrameIOStreamTest {
     Assert.assertTrue("Allocated " + checksumAllocated + " bytes", checksumAllocated < frameCount * 1024L);
     final long skippableAllocated = allocatedBytesForDecode(skippableFrames.toByteArray(), 0);
     Assert.assertTrue("Allocated " + skippableAllocated + " bytes", skippableAllocated < frameCount * 64L);
+  }
+
+  @Test
+  public void testTruncatedBlockDoesNotAllocateBlockSize() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
+    Assume.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean);
+    final com.sun.management.ThreadMXBean threadMXBean = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+    Assume.assumeTrue(threadMXBean.isThreadAllocatedMemorySupported() && threadMXBean.isThreadAllocatedMemoryEnabled());
+
+    final int maxBlockSize = 4 << 20;
+    for (int blockHeader : new int[] {maxBlockSize, maxBlockSize | LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK}) {
+      // a frame header and a block header claiming a 4 MiB block, followed by a little payload and then the end of
+      // the stream
+      final byte[] frameHeader = frameHeader(FLG_BLOCK_INDEPENDENCE, BD_4MB);
+      final ByteBuffer input = ByteBuffer.allocate(frameHeader.length + 4 + 1000).order(ByteOrder.LITTLE_ENDIAN);
+      input.put(frameHeader).putInt(blockHeader);
+
+      final long threadId = Thread.currentThread().getId();
+      long allocated = 0;
+      // the first iteration is a warm-up, so that one-time allocations (e.g. class initialization) are not counted
+      for (int i = 0; i < 2; i++) {
+        final long allocatedBefore = threadMXBean.getThreadAllocatedBytes(threadId);
+        try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(input.array()))) {
+          final IOException e = Assert.assertThrows(IOException.class, is::read);
+          // a plain IOException, not an EOFException that callers may take for a clean end of data
+          Assert.assertEquals(IOException.class, e.getClass());
+          Assert.assertEquals(LZ4FrameInputStream.PREMATURE_EOS, e.getMessage());
+        }
+        allocated = threadMXBean.getThreadAllocatedBytes(threadId) - allocatedBefore;
+      }
+      Assert.assertTrue("Allocated " + allocated + " bytes", allocated < (1 << 20));
+    }
+  }
+
+  @Test
+  public void testSmallCompressedBlockDoesNotAllocateBlockSize() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
+    final byte[] data = new byte[] {1, 2, 3};
+    final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    writeFrame(baos, BD_4MB, data);
+    final long allocated = allocatedBytesForDecode(baos.toByteArray(), data.length);
+    Assert.assertTrue("Allocated " + allocated + " bytes", allocated < (1 << 20));
+  }
+
+  @Test
+  public void testMaximallyCompressibleBlocks() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
+    final byte[] data = new byte[(4 << 20) + 12345];
+    for (LZ4Compressor compressor : new LZ4Compressor[] {
+        LZ4Factory.fastestJavaInstance().fastCompressor(),
+        LZ4Factory.fastestJavaInstance().highCompressor(17),
+    }) {
+      final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      try (OutputStream os = new LZ4FrameOutputStream(baos, LZ4FrameOutputStream.BLOCKSIZE.SIZE_4MB, -1L,
+          compressor, XXHashFactory.fastestInstance().hash32(), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE)) {
+        os.write(data);
+      }
+      try (InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(baos.toByteArray()))) {
+        Assert.assertArrayEquals(data, is.readAllBytes());
+      }
+    }
   }
 
   @Test

@@ -16,6 +16,9 @@ package net.jpountz.lz4;
  * limitations under the License.
  */
 
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -30,6 +33,7 @@ enum LZ4Utils {
   ;
 
   private static final int MAX_INPUT_SIZE = 0x7E000000;
+  private static final int MIN_GROWN_BUFFER_SIZE = 64 * 1024;
 
   static int maxCompressedLength(int length) {
     if (length < 0) {
@@ -38,6 +42,40 @@ enum LZ4Utils {
       throw new IllegalArgumentException("length must be < " + MAX_INPUT_SIZE);
     }
     return length + length / 255 + 16;
+  }
+
+  /**
+   * Reads exactly {@code len} bytes from {@code in} into the start of {@code buf} and returns the buffer holding
+   * them, which is {@code buf} if it is large enough. Otherwise, the buffer is grown only as data actually arrives,
+   * to at most twice the data read so far (but at least {@code min(len, 64 KiB)}), so that a length read from
+   * untrusted input cannot cause a large allocation before the data is present. The buffer is grown geometrically
+   * beyond {@code len}, up to {@code maxLen}, so that a sequence of slightly larger reads does not reallocate every
+   * time.
+   *
+   * @param maxLen the largest length any read into this buffer can have, at least {@code len}
+   * @throws EOFException if the stream ends before {@code len} bytes were read
+   */
+  static byte[] readFullyGrowing(InputStream in, byte[] buf, int len, int maxLen) throws IOException {
+    int read = 0;
+    while (read < len) {
+      if (read == buf.length) {
+        buf = Arrays.copyOf(buf, grownLength(buf.length, Math.min(len, MIN_GROWN_BUFFER_SIZE), maxLen));
+      }
+      final int r = in.read(buf, read, Math.min(len, buf.length) - read);
+      if (r < 0) {
+        throw new EOFException("Stream ended prematurely");
+      }
+      read += r;
+    }
+    return buf;
+  }
+
+  /**
+   * Returns the length to grow a buffer of length {@code length} to: twice its length, but at least
+   * {@code minLength} and at most {@code maxLength}.
+   */
+  static int grownLength(int length, int minLength, int maxLength) {
+    return (int) Math.min(maxLength, Math.max(minLength, 2L * length));
   }
 
   /**

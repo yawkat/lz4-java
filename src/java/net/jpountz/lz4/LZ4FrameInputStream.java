@@ -20,6 +20,7 @@ import net.jpountz.xxhash.StreamingXXHash32;
 import net.jpountz.xxhash.XXHash32;
 import net.jpountz.xxhash.XXHashFactory;
 
+import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Locale;
 
+import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_RATIO;
 import static net.jpountz.lz4.LZ4Utils.notEnoughSpace;
 
 /**
@@ -51,6 +53,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
   static final String DESCRIPTOR_HASH_MISMATCH = "Stream frame descriptor corrupted";
   static final String INVALID_DESCRIPTOR = "Invalid or unsupported frame descriptor";
   static final int MAGIC_SKIPPABLE_BASE = 0x184D2A50;
+  private static final byte[] EMPTY = new byte[0];
 
   private final LZ4SafeDecompressor decompressor;
   private final XXHash32 checksum;
@@ -306,6 +309,29 @@ public class LZ4FrameInputStream extends FilterInputStream {
       throw fail(e);
     } catch (RuntimeException e) {
       throw fail(new IOException("Stream is corrupted", e));
+    } catch (Error e) {
+      // e.g. OutOfMemoryError: the block was partially consumed, so the stream cannot continue
+      fail(new IOException(e));
+      throw e;
+    }
+  }
+
+  // Reads the data of a block of the given length, growing buf as the data arrives
+  private byte[] readBlockData(byte[] buf, int len) throws IOException {
+    try {
+      return LZ4Utils.readFullyGrowing(in, buf == null ? EMPTY : buf, len, maxBlockSize);
+    } catch (EOFException e) {
+      // report truncation like the other parts of the frame do, not as an EOFException that callers may take for a
+      // clean end of data
+      throw new IOException(PREMATURE_EOS);
+    }
+  }
+
+  private void setRawBuffer(byte[] rawBuffer) {
+    if (rawBuffer != this.rawBuffer) {
+      this.rawBuffer = rawBuffer;
+      buffer = ByteBuffer.wrap(rawBuffer);
+      buffer.limit(0); // don't expose buffer contents if this block fails
     }
   }
 
@@ -348,29 +374,15 @@ public class LZ4FrameInputStream extends FilterInputStream {
       throw new IOException(String.format(Locale.ROOT, "Block size %s exceeded max: %s", blockSize, maxBlockSize));
     }
 
-    // The buffers may be larger than maxBlockSize if a previous frame had a larger block size. Never shrink them.
-    if (rawBuffer == null || rawBuffer.length < maxBlockSize) {
-      rawBuffer = new byte[maxBlockSize];
-      buffer = ByteBuffer.wrap(rawBuffer);
-      buffer.limit(0); // don't expose buffer contents if this block fails
-    }
-    final byte[] tmpBuffer; // Use a temporary buffer, potentially one used for compression
+    // The block size comes from the untrusted input, so the buffers are only allocated as the block data actually
+    // arrives. They may be larger than maxBlockSize if a previous frame had a larger block size. Never shrink them.
+    final byte[] tmpBuffer;
     if (compressed) {
-      if (compressedBuffer == null || compressedBuffer.length < maxBlockSize) {
-        compressedBuffer = new byte[maxBlockSize]; // Reused during different compressions
-      }
+      compressedBuffer = readBlockData(compressedBuffer, blockSize);
       tmpBuffer = compressedBuffer;
     } else {
+      setRawBuffer(readBlockData(rawBuffer, blockSize));
       tmpBuffer = rawBuffer;
-    }
-
-    int offset = 0;
-    while (offset < blockSize) {
-      final int lastRead = in.read(tmpBuffer, offset, blockSize - offset);
-      if (lastRead < 0) {
-        throw new IOException(PREMATURE_EOS);
-      }
-      offset += lastRead;
     }
 
     // verify block checksum
@@ -383,8 +395,14 @@ public class LZ4FrameInputStream extends FilterInputStream {
 
     final int currentBufferSize;
     if (compressed) {
+      // the block cannot decompress to more than the maximum compression ratio allows
+      final int maxDecompressedSize = (int) Math.min(maxBlockSize, (long) blockSize * MAX_COMPRESSION_RATIO);
+      if (rawBuffer == null || rawBuffer.length < maxDecompressedSize) {
+        final int oldLength = rawBuffer == null ? 0 : rawBuffer.length;
+        setRawBuffer(new byte[LZ4Utils.grownLength(oldLength, maxDecompressedSize, maxBlockSize)]);
+      }
       try {
-        currentBufferSize = decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, 0, maxBlockSize);
+        currentBufferSize = decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, 0, maxDecompressedSize);
       } catch (LZ4Exception e) {
         throw new IOException(e);
       }
