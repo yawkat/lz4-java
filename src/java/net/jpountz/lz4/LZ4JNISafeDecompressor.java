@@ -31,13 +31,28 @@ final class LZ4JNISafeDecompressor extends LZ4SafeDecompressor {
   public static final LZ4JNISafeDecompressor INSTANCE = new LZ4JNISafeDecompressor();
   private static LZ4SafeDecompressor SAFE_INSTANCE;
 
+  /**
+   * Maps a negative return value of the native {@code LZ4_decompress_safe} / {@code LZ4_decompress_fast} to an
+   * exception message. Since lz4 1.11.0, these are fixed error codes rather than an encoded input position.
+   */
+  static String errorMessage(int errorCode) {
+    switch (errorCode) {
+      case -2:
+        return "Malformed input or destination buffer too small";
+      case -3:
+        return "Malformed input: invalid match offset";
+      default:
+        return "Malformed input";
+    }
+  }
+
   @Override
   public final int decompress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen) {
     SafeUtils.checkRange(src, srcOff, srcLen);
     SafeUtils.checkRange(dest, destOff, maxDestLen);
     final int result = LZ4JNI.LZ4_decompress_safe(src, null, srcOff, srcLen, dest, null, destOff, maxDestLen);
     if (result < 0) {
-      throw new LZ4Exception("Error decoding offset " + (srcOff - result) + " of input buffer");
+      throw new LZ4Exception(errorMessage(result));
     }
     return result;
   }
@@ -68,7 +83,7 @@ final class LZ4JNISafeDecompressor extends LZ4SafeDecompressor {
 
       final int result = LZ4JNI.LZ4_decompress_safe(srcArr, srcBuf, srcOff, srcLen, destArr, destBuf, destOff, maxDestLen);
       if (result < 0) {
-        throw new LZ4Exception("Error decoding offset " + (srcOff - result) + " of input buffer");
+        throw new LZ4Exception(errorMessage(result));
       }
       return result;
     } else {
