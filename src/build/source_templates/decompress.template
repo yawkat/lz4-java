@@ -116,14 +116,20 @@
 
       int matchLen = token & ML_MASK;
       if (matchLen == ML_MASK) {
-        byte len = (byte) 0xFF;
-        while (sOff < srcEnd && (len = ${utils}.readByte(src, sOff++)) == (byte) 0xFF) {
-          matchLen += 0xFF;
+        // At least a token and LAST_LITERALS literals must follow the length bytes. The reference decoder enforces
+        // this since lz4 1.11.0.
+        final int lenLimit = srcEnd - (1 + LAST_LITERALS);
+        int len;
+        do {
+          if (sOff >= lenLimit) {
+            throw new LZ4Exception("Malformed input at " + sOff);
+          }
+          len = ${utils}.readByte(src, sOff++) & 0xFF;
+          matchLen += len;
           if (matchLen < 0) {
             throw new LZ4Exception("Too large matchLen");
           }
-        }
-        matchLen += len & 0xFF;
+        } while (len == 0xFF);
       }
       matchLen += MIN_MATCH;
 

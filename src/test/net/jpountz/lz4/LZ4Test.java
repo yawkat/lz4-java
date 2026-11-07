@@ -319,6 +319,32 @@ public class LZ4Test extends AbstractLZ4Test {
   }
 
   @Test
+  public void testMatchLengthBytesFollowedByTooFewLiterals() {
+    // 1 literal, a match with a length byte, then only 4 last literals; the native decoder rejects this since lz4 1.11.0
+    final byte[] invalid = new byte[] { 0x1F, 7, 1, 0, 0, 0x40, 1, 2, 3, 4 };
+    for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {
+      try {
+        decompressor.decompress(invalid, 0, invalid.length, new byte[64], 0);
+        fail(decompressor + " accepted a byte[] block");
+      } catch (LZ4Exception expected) {
+      }
+      // direct buffers, since heap buffers go through the byte[] code
+      ByteBuffer src = ByteBuffer.allocateDirect(invalid.length);
+      src.put(invalid).flip();
+      try {
+        decompressor.decompress(src, 0, invalid.length, ByteBuffer.allocateDirect(64), 0, 64);
+        fail(decompressor + " accepted a ByteBuffer block");
+      } catch (LZ4Exception expected) {
+      }
+    }
+    // with 5 last literals the same block is valid
+    final byte[] valid = new byte[] { 0x1F, 7, 1, 0, 0, 0x50, 1, 2, 3, 4, 5 };
+    for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {
+      assertEquals(decompressor.toString(), 25, decompressor.decompress(valid, 0, valid.length, new byte[64], 0));
+    }
+  }
+
+  @Test
   public void testEndsWithMatch() {
     // 6 literals, 4 matchs
     final byte[] invalid = new byte[] { 96, 42, 43, 44, 45, 46, 47, 5, 0 };
