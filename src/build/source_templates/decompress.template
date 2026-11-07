@@ -81,7 +81,9 @@
         throw new LZ4Exception("Too large literalLen");
       }
 
-      if (notEnoughSpace(destEnd - literalCopyEnd, COPY_LENGTH) || notEnoughSpace(srcEnd - sOff, COPY_LENGTH + literalLen)) {
+      // The last match must start at least MF_LIMIT bytes before the end of the output, as in the reference decoder.
+      // MF_LIMIT >= COPY_LENGTH, so this also leaves room for wildArraycopy.
+      if (notEnoughSpace(destEnd - literalCopyEnd, MF_LIMIT) || notEnoughSpace(srcEnd - sOff, COPY_LENGTH + literalLen)) {
 @if{ size == "Fast" }
         if (literalCopyEnd != destEnd) {
           throw new LZ4Exception("Malformed input at " + sOff);
@@ -116,8 +118,9 @@
 
       int matchLen = token & ML_MASK;
       if (matchLen == ML_MASK) {
-        // At least a token and LAST_LITERALS literals must follow the length bytes. The reference decoder enforces
-        // this since lz4 1.11.0.
+        // At least a token and LAST_LITERALS literals must follow the length bytes. LZ4_decompress_safe enforces
+        // this since lz4 1.11.0. In the fast decompressors srcEnd is the end of the buffer, not of the block, so
+        // there this only guards the reads; the output-side LAST_LITERALS check below rejects such blocks instead.
         final int lenLimit = srcEnd - (1 + LAST_LITERALS);
         int len;
         do {
@@ -140,16 +143,30 @@
       }
 
       if (matchDec == 0) {
+@if{ size == "Fast" }
+        // The last match must be followed by at least LAST_LITERALS literals, as in the reference fast decoder.
+        if (matchCopyEnd > destEnd - LAST_LITERALS) {
+          throw new LZ4Exception("Malformed input at " + sOff);
+        }
+@else{}
         if (matchCopyEnd > destEnd) {
           throw new LZ4Exception("Malformed input at " + sOff);
         }
+@end{}
         // With matchDec == 0, matchOff == dOff, so we'd copy in place. Zero the data instead. (CVE-2025-66566)
         assert matchOff == dOff; // should always hold, but this extra check will trigger during fuzzing if my logic is wrong
         LZ4Utils.zero(dest, dOff, matchCopyEnd);
       } else if (notEnoughSpace(destEnd - matchCopyEnd, COPY_LENGTH)) {
+@if{ size == "Fast" }
+        // The last match must be followed by at least LAST_LITERALS literals, as in the reference fast decoder.
+        if (matchCopyEnd > destEnd - LAST_LITERALS) {
+          throw new LZ4Exception("Malformed input at " + sOff);
+        }
+@else{}
         if (matchCopyEnd > destEnd) {
           throw new LZ4Exception("Malformed input at " + sOff);
         }
+@end{}
         LZ4${utils}.safeIncrementalCopy(dest, matchOff, dOff, matchLen);
       } else {
         LZ4${utils}.wildIncrementalCopy(dest, matchOff, dOff, matchCopyEnd);

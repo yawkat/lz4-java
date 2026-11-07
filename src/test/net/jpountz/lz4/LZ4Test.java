@@ -344,6 +344,91 @@ public class LZ4Test extends AbstractLZ4Test {
     }
   }
 
+  /**
+   * Asserts that every safe decompressor rejects {@code block} with a destination of {@code maxDestLen} bytes, and
+   * every fast decompressor with a destination of exactly {@code destLen} bytes, also when more bytes follow the
+   * block in the source buffer.
+   */
+  private static void assertAllReject(byte[] block, int maxDestLen, int destLen) {
+    for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {
+      assertThrows(decompressor.toString(), LZ4Exception.class,
+          () -> decompressor.decompress(block, 0, block.length, new byte[maxDestLen], 0));
+      ByteBuffer src = ByteBuffer.allocateDirect(block.length);
+      src.put(block).flip();
+      assertThrows(decompressor.toString(), LZ4Exception.class,
+          () -> decompressor.decompress(src, 0, block.length, ByteBuffer.allocateDirect(maxDestLen), 0, maxDestLen));
+    }
+    final byte[] padded = Arrays.copyOf(block, block.length + 32);
+    for (LZ4FastDecompressor decompressor : FAST_DECOMPRESSORS) {
+      for (byte[] src : new byte[][] { block, padded }) {
+        final String msg = decompressor + " trailing=" + (src.length - block.length);
+        assertThrows(msg, LZ4Exception.class, () -> decompressor.decompress(src, 0, new byte[destLen], 0, destLen));
+        ByteBuffer srcBuf = ByteBuffer.allocateDirect(src.length);
+        srcBuf.put(src).flip();
+        assertThrows(msg, LZ4Exception.class,
+            () -> decompressor.decompress(srcBuf, 0, ByteBuffer.allocateDirect(destLen), 0, destLen));
+      }
+    }
+  }
+
+  /**
+   * Asserts that every decompressor decodes {@code block} to the same {@code decompressedLen} bytes, with an
+   * exact-size destination and with a larger one.
+   */
+  private static void assertAllDecode(byte[] block, int decompressedLen) {
+    final byte[] expected = LZ4Factory.safeInstance().safeDecompressor().decompress(block, decompressedLen);
+    assertEquals(decompressedLen, expected.length);
+    for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {
+      for (int maxDestLen : new int[] { decompressedLen, decompressedLen + 64 }) {
+        final String msg = decompressor + " maxDestLen=" + maxDestLen;
+        byte[] dest = new byte[maxDestLen];
+        assertEquals(msg, decompressedLen, decompressor.decompress(block, 0, block.length, dest, 0));
+        assertArrayEquals(msg, expected, Arrays.copyOf(dest, decompressedLen));
+        ByteBuffer src = ByteBuffer.allocateDirect(block.length);
+        src.put(block).flip();
+        ByteBuffer destBuf = ByteBuffer.allocateDirect(maxDestLen);
+        assertEquals(msg, decompressedLen, decompressor.decompress(src, 0, block.length, destBuf, 0, maxDestLen));
+        destBuf.get(dest);
+        assertArrayEquals(msg, expected, Arrays.copyOf(dest, decompressedLen));
+      }
+    }
+    final byte[] padded = Arrays.copyOf(block, block.length + 32);
+    for (LZ4FastDecompressor decompressor : FAST_DECOMPRESSORS) {
+      for (byte[] src : new byte[][] { block, padded }) {
+        final String msg = decompressor + " trailing=" + (src.length - block.length);
+        byte[] dest = new byte[decompressedLen];
+        assertEquals(msg, block.length, decompressor.decompress(src, 0, dest, 0, decompressedLen));
+        assertArrayEquals(msg, expected, dest);
+        ByteBuffer srcBuf = ByteBuffer.allocateDirect(src.length);
+        srcBuf.put(src).flip();
+        ByteBuffer destBuf = ByteBuffer.allocateDirect(decompressedLen);
+        assertEquals(msg, block.length, decompressor.decompress(srcBuf, 0, destBuf, 0, decompressedLen));
+        destBuf.get(dest);
+        assertArrayEquals(msg, expected, dest);
+      }
+    }
+  }
+
+  @Test
+  public void testMatchFollowedByTooFewLastLiterals() {
+    // 1 literal, a 19 byte match with one length byte, then only 4 last literals
+    assertAllReject(new byte[] { 0x1F, 7, 1, 0, 0, 0x40, 1, 2, 3, 4 }, 64, 24);
+    assertAllDecode(new byte[] { 0x1F, 7, 1, 0, 0, 0x50, 1, 2, 3, 4, 5 }, 25);
+    // the same with a 274 byte match, which needs two length bytes
+    assertAllReject(new byte[] { 0x1F, 7, 1, 0, (byte) 0xFF, 0, 0x40, 1, 2, 3, 4 }, 1024, 279);
+    assertAllDecode(new byte[] { 0x1F, 7, 1, 0, (byte) 0xFF, 0, 0x50, 1, 2, 3, 4, 5 }, 280);
+  }
+
+  @Test
+  public void testLastMatchStartsTooCloseToEnd() {
+    // 1 literal, a 4 byte match starting 9 bytes before the end, then 5 last literals. The last match must start at
+    // least MF_LIMIT bytes before the end of the block, so this is invalid if the block fills the destination.
+    assertAllReject(new byte[] { 0x10, 0x41, 1, 0, 0x50, 0x42, 0x43, 0x44, 0x45, 0x46 }, 10, 10);
+    // 2 literals, a 4 byte match starting exactly MF_LIMIT bytes before the end, then 8 last literals
+    assertAllDecode(new byte[] { 0x20, 0x41, 0x42, 1, 0, (byte) 0x80, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A },
+        14);
+  }
+
   @Test
   public void testEndsWithMatch() {
     // 6 literals, 4 matchs
