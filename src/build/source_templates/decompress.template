@@ -81,7 +81,9 @@
         throw new LZ4Exception("Too large literalLen");
       }
 
-      if (notEnoughSpace(destEnd - literalCopyEnd, COPY_LENGTH) || notEnoughSpace(srcEnd - sOff, COPY_LENGTH + literalLen)) {
+      // The last match must start at least MF_LIMIT bytes before the end of the output, as in the reference decoder.
+      // MF_LIMIT >= COPY_LENGTH, so this also leaves room for wildArraycopy.
+      if (notEnoughSpace(destEnd - literalCopyEnd, MF_LIMIT) || notEnoughSpace(srcEnd - sOff, COPY_LENGTH + literalLen)) {
 @if{ size == "Fast" }
         if (literalCopyEnd != destEnd) {
           throw new LZ4Exception("Malformed input at " + sOff);
