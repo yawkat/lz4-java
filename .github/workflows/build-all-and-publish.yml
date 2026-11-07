@@ -107,7 +107,7 @@ jobs:
         include:
           - os: macos-15-intel
             arch: x86_64
-          - os: macos-14
+          - os: macos-15
             arch: aarch64
             # Azul Zulu 7 not available on macOS Aarch64; only the native library of this build is published
             maven-flags: >-
