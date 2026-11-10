@@ -1172,6 +1172,78 @@
                   <test>net.jpountz.fuzz.XXHash64Test#native_bytebuffer</test>
                 </configuration>
               </execution>
+
+              <!-- LZ4InputStreamTest -->
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#frame_multi</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#frame_multi</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#frame_single</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#frame_single</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_safe_stop</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_safe_stop</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_safe_nostop</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_safe_nostop</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_safe_stop_oversized</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_safe_stop_oversized</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_safe_nostop_oversized</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_safe_nostop_oversized</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_fast_stop</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_fast_stop</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_fast_nostop</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_fast_nostop</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_fast_stop_oversized</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_fast_stop_oversized</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4InputStreamTest#block_fast_nostop_oversized</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4InputStreamTest#block_fast_nostop_oversized</test>
+                </configuration>
+              </execution>
             </executions>
           </plugin>
         </plugins>
