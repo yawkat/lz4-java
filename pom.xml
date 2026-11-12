@@ -69,7 +69,7 @@
     <native.ldflags></native.ldflags>
 
     <!-- plugin versions -->
-    <bnd.maven.plugin.version>7.4.0</bnd.maven.plugin.version>
+    <bnd.maven.plugin.version>7.5.0</bnd.maven.plugin.version>
     <packages.version>${project.version}</packages.version>
     <ivy.version>${project.version}</ivy.version>
 
