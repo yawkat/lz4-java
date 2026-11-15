@@ -25,7 +25,7 @@ runs:
             exit 1 ;;
         esac
         cd "$RUNNER_TEMP"
-        curl --fail --no-progress-meter --location --output "zulu-jdk7-$file" "$base-$file"
+        curl --fail --no-progress-meter --location --retry 5 --retry-all-errors --output "zulu-jdk7-$file" "$base-$file"
         if command -v sha256sum > /dev/null; then
           echo "$sha256  zulu-jdk7-$file" | sha256sum -c -
         else
