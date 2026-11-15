@@ -1,0 +1,40 @@
+# Azul removed Zulu 7 from its metadata API, so `distribution: zulu` in setup-java can no longer resolve it. The
+# archives are still on the CDN, so download the last Zulu 7 release directly and install it as a `jdkfile`.
+name: Setup Zulu JDK 7
+description: Install Azul Zulu JDK 7 (7.0.352) from the Azul CDN and register it as a Maven toolchain
+runs:
+  using: composite
+  steps:
+    - name: Download Zulu JDK 7
+      id: download
+      shell: bash
+      run: |
+        base=https://cdn.azul.com/zulu/bin/zulu7.56.0.11-ca-jdk7.0.352
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)
+            file=linux_x64.tar.gz
+            sha256=8a7387c1ed151474301b6553c6046f865dc6c1e1890bcf106acc2780c55727c8 ;;
+          macOS-X64)
+            file=macosx_x64.tar.gz
+            sha256=31909aa6233289f8f1d015586825587e95658ef59b632665e1e49fc33a2cdf06 ;;
+          Windows-X64)
+            file=win_x64.zip
+            sha256=a0255d1e29d4ab9d685b698217d9adca6a29b2e493608d4e73feda84e7759085 ;;
+          *)
+            echo "::error::Zulu JDK 7 is not available for $RUNNER_OS-$RUNNER_ARCH"
+            exit 1 ;;
+        esac
+        cd "$RUNNER_TEMP"
+        curl --fail --no-progress-meter --location --output "zulu-jdk7-$file" "$base-$file"
+        if command -v sha256sum > /dev/null; then
+          echo "$sha256  zulu-jdk7-$file" | sha256sum -c -
+        else
+          echo "$sha256  zulu-jdk7-$file" | shasum -a 256 -c -
+        fi
+        echo "file=zulu-jdk7-$file" >> "$GITHUB_OUTPUT"
+    - name: Install Zulu JDK 7
+      uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+      with:
+        distribution: jdkfile
+        jdkFile: ${{ runner.temp }}/${{ steps.download.outputs.file }}
+        java-version: '7'
