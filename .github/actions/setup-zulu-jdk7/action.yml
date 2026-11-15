@@ -1,5 +1,6 @@
 # Azul removed Zulu 7 from its metadata API, so `distribution: zulu` in setup-java can no longer resolve it. The
-# archives are still on the CDN, so download the last Zulu 7 release directly and install it as a `jdkfile`.
+# archives are still on the CDN, so download the last Zulu 7 release directly and install it as a `jdkfile`. The same
+# archives are mirrored at https://github.com/yawkat/zulu-jdk7-mirror.
 name: Setup Zulu JDK 7
 description: Install Azul Zulu JDK 7 (7.0.352) from the Azul CDN and register it as a Maven toolchain
 runs:
@@ -9,7 +10,7 @@ runs:
       id: download
       shell: bash
       run: |
-        base=https://cdn.azul.com/zulu/bin/zulu7.56.0.11-ca-jdk7.0.352
+        name=zulu7.56.0.11-ca-jdk7.0.352
         case "$RUNNER_OS-$RUNNER_ARCH" in
           Linux-X64)
             file=linux_x64.tar.gz
@@ -25,7 +26,13 @@ runs:
             exit 1 ;;
         esac
         cd "$RUNNER_TEMP"
-        curl --fail --no-progress-meter --location --retry 5 --retry-all-errors --output "zulu-jdk7-$file" "$base-$file"
+        # Fall back to our own mirror in case Azul also removes the archives from its CDN
+        for url in "https://cdn.azul.com/zulu/bin/$name-$file" \
+                   "https://github.com/yawkat/zulu-jdk7-mirror/releases/download/$name/$name-$file"; do
+          curl --fail --no-progress-meter --location --retry 5 --retry-connrefused --output "zulu-jdk7-$file" "$url" && break
+          echo "::warning::Failed to download $url"
+          rm -f "zulu-jdk7-$file"
+        done
         if command -v sha256sum > /dev/null; then
           echo "$sha256  zulu-jdk7-$file" | sha256sum -c -
         else
