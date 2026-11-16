@@ -18,9 +18,16 @@ permissions:
 jobs:
   linux:
     name: Linux natives (${{ matrix.arch }})
-    # Not ubuntu-latest: Ubuntu 26.04 builds libgcc and the CRT objects for x86-64-v3 (amd64v3 runner images), z15 and
-    # RVA23, and those end up in the library even with -march set below. Bump only after checking the baseline step.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    # The toolchain decides the CPU baseline of the natives: besides the compiler defaults, libgcc and the CRT objects
+    # are linked into the library and are built for the distribution's baseline. Ubuntu 26.04 raised it to x86-64-v3
+    # (amd64v3 runner images), z15 and RVA23, so build in Debian stable, which keeps the original baselines. Renovate
+    # updates the digest; bump the Debian release only if the baseline check below still passes.
+    container: debian:trixie@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
+    defaults:
+      run:
+        # The default in containers is sh
+        shell: bash
     env:
       NATIVE_BASE_CFLAGS: -O2 -fno-omit-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security
       NATIVE_XXHASH_EXTRA_CFLAGS: -fno-tree-vectorize
@@ -28,8 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Set the CPU baseline explicitly for every arch, the default depends on how the runner's GCC was configured
-          # (Ubuntu 26.04: x86-64-v3 for the amd64v3 runner images, z15 for s390x, RVA23 for riscv64).
+          # Set the CPU baseline explicitly for every arch rather than relying on the compiler's default.
           # -mbranches-within-32B-boundaries mitigates the JCC erratum of Skylake-family Intel CPUs, like upstream lz4
           # does by default (JCC_FLAGS in src/lz4/build/make/lz4defs.make); 6-20% faster compression and decompression
           # on a Cascade Lake CPU. Also used for macOS x86_64 and Windows below.
@@ -50,7 +56,7 @@ jobs:
             apt: "gcc-aarch64-linux-gnu"
           - arch: ppc64le
             cc: powerpc64le-linux-gnu-gcc
-            arch_cflags: "-mcpu=power9"
+            arch_cflags: "-mcpu=power8"
             ldflags: ""
             apt: "gcc-powerpc64le-linux-gnu"
           - arch: s390x
@@ -65,6 +71,12 @@ jobs:
             apt: "gcc-riscv64-linux-gnu"
 
     steps:
+      # Before checkout, which needs git for submodules
+      - name: Install toolchain
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates curl unzip gcc ${{ matrix.apt }}
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -78,12 +90,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-
-      - name: Install cross toolchain (if needed)
-        if: ${{ matrix.apt != '' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ matrix.apt }}
 
       - name: Build (mvn package)
         run: |
@@ -102,11 +108,14 @@ jobs:
           case "${{ matrix.arch }}" in
             # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics
             amd64|i386) pattern='%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]' ;;
+            # POWER9 (ISA 3.0) mnemonics
+            ppc64le) pattern='^(cnttz[dw]|mod[su][dw]|setb|mtvsrdd|mtvsrws|mfvsrld|lxv|stxv|lxvx|stxvx|lxsd|stxsd|lxssp|stxssp|lxvb16x|stxvb16x|lxvh8x|stxvh8x|lxvl|lxvll|stxvl|stxvll|lxvwsx|xxperm|xxpermr|vextu[bhw][lr]x|vcmpnez?[bhw]|vctz[bdhw]|vclzlsbb|vctzlsbb|xxbr[dhqw]|xxspltib|maddld|maddhdu?|darn|cmprb|cmpeqb|extswsli|addpcis|vneg[dw]|vprtyb[dqw]|xxinsertw|xxextractuw|vpermr|vrl[dw]nm|vrl[dw]mi)[[:space:]]' ;;
             # z14 (arch12) and z15 (arch13) mnemonics
             s390x) pattern='^(sel[a-z]*|nngrk|nnrk|nogrk|nork|nxgrk|nxrk|ncgrk|ncrk|ocgrk|ocrk|mgrk|msgrkc|msrkc|mgh|agh|sgh|vlbr[a-z]*|vstbr[a-z]*|vler[a-z]*|vster[a-z]*)[[:space:]]' ;;
             riscv64)
               # Only the rv64gc extensions; the assembler records the extensions the code was built for
-              arch="$(readelf -A "$lib" | sed -n 's/.*Tag_RISCV_arch: "\(.*\)"/\1/p')"
+              attributes="$(readelf -A "$lib")"
+              arch="$(sed -n 's/.*Tag_RISCV_arch: "\(.*\)"/\1/p' <<<"$attributes")"
               echo "Tag_RISCV_arch: $arch"
               if [ -z "$arch" ] || grep -Eq '_(b|v|zb[a-z]*|zv[a-z0-9]*|zicond)[0-9]' <<<"$arch"; then
                 echo "::error::$lib is built for extensions above rv64gc"
@@ -115,8 +124,9 @@ jobs:
               exit 0 ;;
             *) exit 0 ;;
           esac
+          disassembly="$("$objdump" -d --no-show-raw-insn "$lib")"
           # Strip the address column; some objdump targets separate mnemonic and operands with a tab
-          bad="$("$objdump" -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' | grep -E "$pattern" || true)"
+          bad="$(awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' <<<"$disassembly" | grep -E "$pattern" || true)"
           if [ -n "$bad" ]; then
             echo "::error::$lib contains instructions above the baseline:"
             awk '{ print $1 }' <<<"$bad" | sort | uniq -c
@@ -239,7 +249,8 @@ jobs:
           lib=target/classes/net/jpountz/util/windows/amd64/liblz4-java.dll
           # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics, as in the Linux job
           pattern='%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]'
-          bad="$(objdump -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' | grep -E "$pattern" || true)"
+          disassembly="$(objdump -d --no-show-raw-insn "$lib")"
+          bad="$(awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' <<<"$disassembly" | grep -E "$pattern" || true)"
           if [ -n "$bad" ]; then
             echo "::error::$lib contains instructions above the baseline:"
             awk '{ print $1 }' <<<"$bad" | sort | uniq -c
