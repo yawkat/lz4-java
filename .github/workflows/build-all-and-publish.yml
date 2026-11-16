@@ -91,9 +91,11 @@ jobs:
           distribution: temurin
           java-version: '25'
 
+      # setup-java writes toolchains.xml to $HOME, which in the container differs from Maven's user.home (/root)
       - name: Build (mvn package)
         run: |
               ./mvnw -B -C -V -DskipTests \
+              --toolchains "$HOME/.m2/toolchains.xml" \
               -Darch.id=${{ matrix.arch }} \
               -Dnative.cc=${{ matrix.cc }} \
               "-Dnative.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }}" \
