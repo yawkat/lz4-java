@@ -443,12 +443,64 @@
                       <matches pattern="^(x86|i386|i686)$" string="${arch.id}"/>
                     </condition>
 
+                    <!-- Branch alignment for the Intel JCC erratum, like upstream lz4 (JCC_FLAGS in build/make/lz4defs.make).
+                         Clang takes it as a driver option, GCC only through
+                         GNU as, and other assemblers don't support it: probe both spellings like upstream lz4. -->
+                    <mkdir dir="${project.build.directory}/native"/>
+                    <tempfile property="jcc.probe" destdir="${project.build.directory}/native" prefix="jcc-probe" suffix=".c" deleteonexit="true"/>
+                    <echo file="${jcc.probe}" message="int f(int x) { return x ? 1 : 2; }${line.separator}"/>
+                    <exec executable="${native.cc}" resultproperty="jcc.driver.result" outputproperty="jcc.driver.output" failifexecutionfails="false">
+                      <arg value="-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" resultproperty="jcc.as.result" outputproperty="jcc.as.output" failifexecutionfails="false">
+                      <arg value="-Wa,-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <delete file="${jcc.probe}.o" quiet="true"/>
+                    <condition property="native.jcc.cflags" value="-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.driver.result}" arg2="0"/>
+                    </condition>
+                    <condition property="native.jcc.cflags" value="-Wa,-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.as.result}" arg2="0"/>
+                    </condition>
+                    <property name="native.jcc.cflags" value=""/>
+
+                    <!-- CPU baseline per arch, so it doesn't depend on the compiler's default; on x86 also the JCC erratum
+                         alignment. Overridable via -Dnative.arch.cflags. scripts/check_natives.py checks the result. -->
+                    <condition property="native.arch.cflags" value="-march=x86-64 -mtune=generic ${native.jcc.cflags}">
+                      <matches pattern="^(x86_64|amd64)$" string="${arch.id}"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-march=i686 -mtune=generic ${native.jcc.cflags}">
+                      <equals arg1="${arch.id}" arg2="i386"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-march=armv8-a">
+                      <equals arg1="${arch.id}" arg2="aarch64"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-mcpu=power8">
+                      <equals arg1="${arch.id}" arg2="ppc64le"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-march=z13">
+                      <equals arg1="${arch.id}" arg2="s390x"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-march=rv64gc -mabi=lp64d">
+                      <equals arg1="${arch.id}" arg2="riscv64"/>
+                    </condition>
+                    <property name="native.arch.cflags" value=""/>
+
                     <!-- Toolchain overrides come from Maven properties: ${native.cc}, ${native.cflags}, ${native.ldflags} -->
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
                     <mkdir dir="${project.build.directory}/native/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -461,6 +513,7 @@
                     </exec>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -473,6 +526,7 @@
                     </exec>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -485,6 +539,7 @@
                     </exec>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -497,6 +552,7 @@
                     </exec>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.xxhash.cflags}"/>
                       <arg value="-fPIC"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -559,6 +615,41 @@
                       <matches pattern="^(aarch64|arm64|ARM64)$" string="${arch.id}"/>
                     </condition>
 
+                    <!-- Branch alignment for the Intel JCC erratum, see the Linux profile. Clang takes it as a driver option, GCC only through
+                         GNU as, and other assemblers don't support it: probe both spellings like upstream lz4. -->
+                    <mkdir dir="${project.build.directory}/native"/>
+                    <tempfile property="jcc.probe" destdir="${project.build.directory}/native" prefix="jcc-probe" suffix=".c" deleteonexit="true"/>
+                    <echo file="${jcc.probe}" message="int f(int x) { return x ? 1 : 2; }${line.separator}"/>
+                    <exec executable="${native.cc}" resultproperty="jcc.driver.result" outputproperty="jcc.driver.output" failifexecutionfails="false">
+                      <arg value="-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" resultproperty="jcc.as.result" outputproperty="jcc.as.output" failifexecutionfails="false">
+                      <arg value="-Wa,-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <delete file="${jcc.probe}.o" quiet="true"/>
+                    <condition property="native.jcc.cflags" value="-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.driver.result}" arg2="0"/>
+                    </condition>
+                    <condition property="native.jcc.cflags" value="-Wa,-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.as.result}" arg2="0"/>
+                    </condition>
+                    <property name="native.jcc.cflags" value=""/>
+
+                    <!-- JCC erratum alignment on x86_64. With clang, -O3 is faster than -O2. Overridable via
+                         -Dnative.arch.cflags. -->
+                    <condition property="native.arch.cflags" value="${native.jcc.cflags}">
+                      <equals arg1="${arch.id}" arg2="x86_64"/>
+                    </condition>
+                    <property name="native.arch.cflags" value=""/>
+
                     <!-- Toolchain overrides come from Maven properties: ${native.cc}, ${native.cflags}, ${native.ldflags} -->
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
@@ -567,6 +658,7 @@
                       <arg value="-O3"/>
                       <arg value="-fPIC"/>
                       <arg value="-dynamiclib"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-mmacosx-version-min=10.9"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
@@ -621,13 +713,53 @@
                       <matches pattern="^(x86|i386|i686)$" string="${arch.id}"/>
                     </condition>
 
+                    <!-- Branch alignment for the Intel JCC erratum, see the Linux profile. Clang takes it as a driver option, GCC only through
+                         GNU as, and other assemblers don't support it: probe both spellings like upstream lz4. -->
+                    <mkdir dir="${project.build.directory}/native"/>
+                    <tempfile property="jcc.probe" destdir="${project.build.directory}/native" prefix="jcc-probe" suffix=".c" deleteonexit="true"/>
+                    <echo file="${jcc.probe}" message="int f(int x) { return x ? 1 : 2; }${line.separator}"/>
+                    <exec executable="${native.cc}" resultproperty="jcc.driver.result" outputproperty="jcc.driver.output" failifexecutionfails="false">
+                      <arg value="-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <exec executable="${native.cc}" resultproperty="jcc.as.result" outputproperty="jcc.as.output" failifexecutionfails="false">
+                      <arg value="-Wa,-mbranches-within-32B-boundaries"/>
+                      <arg value="-c"/>
+                      <arg file="${jcc.probe}"/>
+                      <arg value="-o"/>
+                      <arg file="${jcc.probe}.o"/>
+                    </exec>
+                    <delete file="${jcc.probe}.o" quiet="true"/>
+                    <condition property="native.jcc.cflags" value="-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.driver.result}" arg2="0"/>
+                    </condition>
+                    <condition property="native.jcc.cflags" value="-Wa,-mbranches-within-32B-boundaries">
+                      <equals arg1="${jcc.as.result}" arg2="0"/>
+                    </condition>
+                    <property name="native.jcc.cflags" value=""/>
+
+                    <!-- CPU baseline and JCC erratum alignment, see the Linux profile. MinGW-Builds GCC defaults to nocona
+                         (SSE3). Overridable via -Dnative.arch.cflags. -->
+                    <condition property="native.arch.cflags" value="-march=x86-64 -mtune=generic ${native.jcc.cflags}">
+                      <equals arg1="${arch.id}" arg2="amd64"/>
+                    </condition>
+                    <condition property="native.arch.cflags" value="-march=i686 -mtune=generic ${native.jcc.cflags}">
+                      <equals arg1="${arch.id}" arg2="i386"/>
+                    </condition>
+                    <property name="native.arch.cflags" value=""/>
+
                     <!-- Toolchain overrides come from Maven properties: ${native.cc}, ${native.cflags}, ${native.ldflags} -->
 
                     <mkdir dir="${project.build.outputDirectory}/net/jpountz/util/${os.id}/${arch.id}"/>
                     <exec executable="${native.cc}" failonerror="true">
                       <env key="SOURCE_DATE_EPOCH" value="0"/>
-                      <arg value="-O3"/>
+                      <!-- -O3 makes decompression ~10% slower with GCC -->
+                      <arg value="-O2"/>
                       <arg value="-shared"/>
+                      <arg line="${native.arch.cflags}"/>
                       <arg line="${native.cflags}"/>
                       <arg value="-I${project.basedir}/src/lz4/lib"/>
                       <arg value="-I${java.home}/include"/>

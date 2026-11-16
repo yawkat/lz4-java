@@ -59,6 +59,28 @@ jobs:
             -Dsurefire.reportFormat=plain \
             ${{ matrix.maven-flags }} \
             verify
+      - name: Check native library
+        run: |
+          if [ "$(uname -m)" = "x86_64" ]; then
+            arch_id=amd64
+          else
+            arch_id=$(uname -m)
+          fi
+          python3 scripts/check_natives.py --targets "linux/${arch_id}" target/classes/net/jpountz/util
+      # The release workflow runs scripts/check_natives.py on all platforms; make sure it still catches the CPU
+      # baseline problems of the 1.13.0 natives (https://github.com/yawkat/lz4-java/issues/186)
+      - name: Self-test native library check
+        if: matrix.coverage
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends binutils-multiarch
+          ls /usr/bin/llvm-objdump* > /dev/null 2>&1 || sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends llvm
+          jar="$RUNNER_TEMP/lz4-java-1.13.0.jar"
+          curl --fail --no-progress-meter --location --retry 5 --output "$jar" \
+            https://repo1.maven.org/maven2/at/yawk/lz4/lz4-java/1.13.0/lz4-java-1.13.0.jar
+          echo "aba573fcd8d606a38e0157ba1eb7f16db4ece58bdbf7ea6ba2c3bc17cdf07b23  $jar" | sha256sum -c -
+          python3 scripts/check_natives.py \
+            --expect-failing linux/amd64,linux/ppc64le,linux/riscv64,linux/s390x,windows/amd64 "$jar"
       - name: Summarize coverage
         if: matrix.coverage
         run: python3 scripts/jacoco_summary.py target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
