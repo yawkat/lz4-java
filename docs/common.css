@@ -1,8 +1,14 @@
+/* Anchor the dropdown to its own entry. Otherwise it is placed relative to the nearest positioned ancestor, which on
+   the javadoc pages is the full-width navbar, far to the right of the centered nav content on wide screens. */
+#lz4-header > li {
+  position: relative;
+}
 #lz4-header .dropdown {
   position: absolute;
   display: none;
   width: auto;
   right: 0;
+  white-space: nowrap;
 }
 #lz4-header:hover .dropdown {
   display: block;
