@@ -26,15 +26,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Set -march explicitly, the default depends on how the runner's GCC was configured (x86-64-v3 on Ubuntu 26.04)
+          # Set -march explicitly, the default depends on how the runner's GCC was configured (x86-64-v3 on Ubuntu 26.04).
+          # -mbranches-within-32B-boundaries mitigates the JCC erratum of Skylake-family Intel CPUs, like upstream lz4
+          # does by default (JCC_FLAGS in src/lz4/build/make/lz4defs.make); 6-20% faster compression and decompression
+          # on a Cascade Lake CPU.
           - arch: amd64
             cc: gcc
-            arch_cflags: "-march=x86-64 -mtune=generic -mno-omit-leaf-frame-pointer -fcf-protection"
+            arch_cflags: "-march=x86-64 -mtune=generic -Wa,-mbranches-within-32B-boundaries -mno-omit-leaf-frame-pointer -fcf-protection"
             ldflags: ""
             apt: ""
           - arch: i386
             cc: gcc
-            arch_cflags: "-march=i686 -mtune=generic -mno-omit-leaf-frame-pointer -fcf-protection -m32"
+            arch_cflags: "-march=i686 -mtune=generic -Wa,-mbranches-within-32B-boundaries -mno-omit-leaf-frame-pointer -fcf-protection -m32"
             ldflags: "-m32"
             apt: "gcc-multilib libc6-dev-i386"
           - arch: aarch64
