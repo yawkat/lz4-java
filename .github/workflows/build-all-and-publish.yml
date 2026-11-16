@@ -18,7 +18,9 @@ permissions:
 jobs:
   linux:
     name: Linux natives (${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: Ubuntu 26.04 builds libgcc and the CRT objects for x86-64-v3 (amd64v3 runner images), z15 and
+    # RVA23, and those end up in the library even with -march set below. Bump only after checking the baseline step.
+    runs-on: ubuntu-24.04
     env:
       NATIVE_BASE_CFLAGS: -O2 -fno-omit-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security
       NATIVE_XXHASH_EXTRA_CFLAGS: -fno-tree-vectorize
@@ -26,10 +28,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Set -march explicitly, the default depends on how the runner's GCC was configured (x86-64-v3 on Ubuntu 26.04).
+          # Set the CPU baseline explicitly for every arch, the default depends on how the runner's GCC was configured
+          # (Ubuntu 26.04: x86-64-v3 for the amd64v3 runner images, z15 for s390x, RVA23 for riscv64).
           # -mbranches-within-32B-boundaries mitigates the JCC erratum of Skylake-family Intel CPUs, like upstream lz4
           # does by default (JCC_FLAGS in src/lz4/build/make/lz4defs.make); 6-20% faster compression and decompression
-          # on a Cascade Lake CPU.
+          # on a Cascade Lake CPU. Also used for macOS x86_64 and Windows below.
           - arch: amd64
             cc: gcc
             arch_cflags: "-march=x86-64 -mtune=generic -Wa,-mbranches-within-32B-boundaries -mno-omit-leaf-frame-pointer -fcf-protection"
@@ -42,22 +45,22 @@ jobs:
             apt: "gcc-multilib libc6-dev-i386"
           - arch: aarch64
             cc: aarch64-linux-gnu-gcc
-            arch_cflags: ""
+            arch_cflags: "-march=armv8-a"
             ldflags: ""
             apt: "gcc-aarch64-linux-gnu"
           - arch: ppc64le
             cc: powerpc64le-linux-gnu-gcc
-            arch_cflags: ""
+            arch_cflags: "-mcpu=power9"
             ldflags: ""
             apt: "gcc-powerpc64le-linux-gnu"
           - arch: s390x
             cc: s390x-linux-gnu-gcc
-            arch_cflags: ""
+            arch_cflags: "-march=z13"
             ldflags: ""
             apt: "gcc-s390x-linux-gnu"
           - arch: riscv64
             cc: riscv64-linux-gnu-gcc
-            arch_cflags: ""
+            arch_cflags: "-march=rv64gc -mabi=lp64d"
             ldflags: ""
             apt: "gcc-riscv64-linux-gnu"
 
@@ -92,13 +95,28 @@ jobs:
               "-Dnative.ldflags=${{ matrix.ldflags }}" \
               package
 
-      - name: Check for instructions above the x86 baseline
-        if: ${{ matrix.arch == 'amd64' || matrix.arch == 'i386' }}
+      - name: Check for instructions above the baseline
         run: |
           lib="target/classes/net/jpountz/util/linux/${{ matrix.arch }}/liblz4-java.so"
-          # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics; must not appear in a baseline x86-64/i686 build
-          bad="$(objdump -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { print $2 }' \
-            | grep -E '%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]' || true)"
+          objdump="${{ matrix.cc }}"; objdump="${objdump%gcc}objdump"
+          case "${{ matrix.arch }}" in
+            # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics
+            amd64|i386) pattern='%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]' ;;
+            # z14 (arch12) and z15 (arch13) mnemonics
+            s390x) pattern='^(sel[a-z]*|nngrk|nnrk|nogrk|nork|nxgrk|nxrk|ncgrk|ncrk|ocgrk|ocrk|mgrk|msgrkc|msrkc|mgh|agh|sgh|vlbr[a-z]*|vstbr[a-z]*|vler[a-z]*|vster[a-z]*)[[:space:]]' ;;
+            riscv64)
+              # Only the rv64gc extensions; the assembler records the extensions the code was built for
+              arch="$(readelf -A "$lib" | sed -n 's/.*Tag_RISCV_arch: "\(.*\)"/\1/p')"
+              echo "Tag_RISCV_arch: $arch"
+              if [ -z "$arch" ] || grep -Eq '_(b|v|zb[a-z]*|zv[a-z0-9]*|zicond)[0-9]' <<<"$arch"; then
+                echo "::error::$lib is built for extensions above rv64gc"
+                exit 1
+              fi
+              exit 0 ;;
+            *) exit 0 ;;
+          esac
+          # Strip the address column; some objdump targets separate mnemonic and operands with a tab
+          bad="$("$objdump" -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' | grep -E "$pattern" || true)"
           if [ -n "$bad" ]; then
             echo "::error::$lib contains instructions above the baseline:"
             awk '{ print $1 }' <<<"$bad" | sort | uniq -c
@@ -121,6 +139,8 @@ jobs:
         include:
           - os: macos-15-intel
             arch: x86_64
+            # JCC erratum, see the Linux job
+            cflags: -mbranches-within-32B-boundaries
           - os: macos-15
             arch: aarch64
             # Azul Zulu 7 not available on macOS Aarch64; only the native library of this build is published
@@ -155,6 +175,7 @@ jobs:
           ./mvnw -B -C -V \
             -Darch.id=${{ matrix.arch }} \
             -Dnative.cc=cc \
+            "-Dnative.cflags=${{ matrix.cflags }}" \
             ${{ matrix.maven-flags }} \
             verify
 
@@ -201,13 +222,29 @@ jobs:
       - name: Check LZ4 CLI
         run: lz4 -V
 
+      # -O2 overrides the profile's -O3, which makes decompression ~10% slower with GCC. Baseline and JCC erratum as
+      # in the Linux job.
       - name: Build (mvn verify)
         shell: bash
         run: |
           ./mvnw -B -C -V \
             -Darch.id=amd64 \
             -Dnative.cc=gcc \
+            "-Dnative.cflags=-O2 -march=x86-64 -mtune=generic -Wa,-mbranches-within-32B-boundaries" \
             verify
+
+      - name: Check for instructions above the baseline
+        shell: bash
+        run: |
+          lib=target/classes/net/jpountz/util/windows/amd64/liblz4-java.dll
+          # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics, as in the Linux job
+          pattern='%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]'
+          bad="$(objdump -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { $1 = ""; print substr($0, 2) }' | grep -E "$pattern" || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::$lib contains instructions above the baseline:"
+            awk '{ print $1 }' <<<"$bad" | sort | uniq -c
+            exit 1
+          fi
 
       - name: Upload native library
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
