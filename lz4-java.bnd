@@ -4,3 +4,6 @@ Bundle-Version: ${version_cleanup;${ivy.version}}
 Export-Package: net.jpountz.*;version:=${version_cleanup;${packages.version}}
 -noee: true
 -removeheaders: Require-Capability
+# No per-release OSGI-INF/MANIFEST.MF: bnd writes an empty Require-Capability there, which Felix and Equinox reject.
+# The Java 9 classes in META-INF/versions/9 only add java.lang.invoke, and java.* always comes from the boot loader.
+-jpms-multi-release: false

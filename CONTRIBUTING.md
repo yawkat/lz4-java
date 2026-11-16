@@ -20,6 +20,8 @@ To be accepted, a contribution must meet these requirements:
 - **The build passes.** `./mvnw verify` must succeed, and CI must be green on all platforms. See the
   [README](README.md#building) for build prerequisites.
 - **Java 7 compatibility.** The library is compiled with Java 7 and must not use newer language features or APIs.
+  The one exception is `src/java9`, compiled for Java 9 into `META-INF/versions/9` of the multi-release JAR. It only
+  holds the Java 9+ variant of `net.jpountz.util.ByteArrays`, which must keep the same methods as the Java 7 one.
   Tests may use the newer Java version configured in `pom.xml`.
 - **No breaking API changes.** Public API must stay source and binary compatible. Deprecate instead of removing, and
   keep new non-user-facing members as private as possible.

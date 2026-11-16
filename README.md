@@ -87,7 +87,8 @@ now always uses the (slower) safe Java implementation, regardless of which facto
 `LZ4Factory` and `XXHashFactory` provide the following implementations, which all produce compatible output:
 
 - `nativeInstance()`: JNI bindings to the reference C implementation.
-- `safeInstance()`: A pure Java port.
+- `safeInstance()`: A pure Java port. On Java 9 and newer it reads, writes and compares several bytes at a time with
+  `VarHandle` and `Arrays.mismatch`, still without `sun.misc.Unsafe`.
 - `unsafeInstance()`: A Java port using `sun.misc.Unsafe`. For LZ4, this is currently an alias for the safe instance
   out of caution.
 

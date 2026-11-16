@@ -16,6 +16,7 @@ package net.jpountz.lz4;
  * limitations under the License.
  */
 
+import net.jpountz.util.ByteArrays;
 import net.jpountz.util.SafeUtils;
 
 import static net.jpountz.lz4.LZ4Constants.LAST_LITERALS;
@@ -38,7 +39,7 @@ enum LZ4SafeUtils {
   }
 
   static boolean readIntEquals(byte[] buf, int i, int j) {
-    return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
+    return ByteArrays.readIntEquals(buf, i, j);
   }
 
   static void safeIncrementalCopy(byte[] dest, int matchOff, int dOff, int matchLen) {
@@ -48,25 +49,11 @@ enum LZ4SafeUtils {
   }
 
   static void wildIncrementalCopy(byte[] dest, int matchOff, int dOff, int matchCopyEnd) {
-    do {
-      copy8Bytes(dest, matchOff, dest, dOff);
-      matchOff += 8;
-      dOff += 8;
-    } while (dOff < matchCopyEnd);
-  }
-
-  static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
-    for (int i = 0; i < 8; ++i) {
-      dest[dOff + i] = src[sOff + i];
-    }
+    ByteArrays.wildIncrementalCopy(dest, matchOff, dOff, matchCopyEnd);
   }
 
   static int commonBytes(byte[] b, int o1, int o2, int limit) {
-    int count = 0;
-    while (o2 < limit && b[o1++] == b[o2++]) {
-      ++count;
-    }
-    return count;
+    return ByteArrays.commonBytes(b, o1, o2, limit);
   }
 
   static int commonBytesBackward(byte[] b, int o1, int o2, int l1, int l2) {
@@ -84,9 +71,9 @@ enum LZ4SafeUtils {
   static void wildArraycopy(byte[] src, int sOff, byte[] dest, int dOff, int len) {
     try {
       for (int i = 0; i < len; i += 8) {
-        copy8Bytes(src, sOff + i, dest, dOff + i);
+        ByteArrays.copy8Bytes(src, sOff + i, dest, dOff + i);
       }
-    } catch (ArrayIndexOutOfBoundsException e) {
+    } catch (IndexOutOfBoundsException e) { // the Java 9+ ByteArrays may throw the superclass
       throw new LZ4Exception("Malformed input at offset " + sOff);
     }
   }
