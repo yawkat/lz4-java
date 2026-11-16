@@ -26,14 +26,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Set -march explicitly, the default depends on how the runner's GCC was configured (x86-64-v3 on Ubuntu 26.04)
           - arch: amd64
             cc: gcc
-            arch_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection"
+            arch_cflags: "-march=x86-64 -mtune=generic -mno-omit-leaf-frame-pointer -fcf-protection"
             ldflags: ""
             apt: ""
           - arch: i386
             cc: gcc
-            arch_cflags: "-mno-omit-leaf-frame-pointer -fcf-protection -m32"
+            arch_cflags: "-march=i686 -mtune=generic -mno-omit-leaf-frame-pointer -fcf-protection -m32"
             ldflags: "-m32"
             apt: "gcc-multilib libc6-dev-i386"
           - arch: aarch64
@@ -87,6 +88,19 @@ jobs:
               "-Dnative.xxhash.cflags=${{ env.NATIVE_BASE_CFLAGS }} ${{ matrix.arch_cflags }} ${{ env.NATIVE_XXHASH_EXTRA_CFLAGS }}" \
               "-Dnative.ldflags=${{ matrix.ldflags }}" \
               package
+
+      - name: Check for instructions above the x86 baseline
+        if: ${{ matrix.arch == 'amd64' || matrix.arch == 'i386' }}
+        run: |
+          lib="target/classes/net/jpountz/util/linux/${{ matrix.arch }}/liblz4-java.so"
+          # AVX/AVX-512 registers and BMI1/BMI2/LZCNT/MOVBE mnemonics; must not appear in a baseline x86-64/i686 build
+          bad="$(objdump -d --no-show-raw-insn "$lib" | awk -F'\t' 'NF >= 2 { print $2 }' \
+            | grep -E '%[yz]mm|^v[a-z0-9]+[[:space:]].*%xmm|^(rorx|sarx|shlx|shrx|andn|bextr|blsi|blsmsk|blsr|bzhi|pdep|pext|mulx|lzcnt|movbe)[[:space:]]' || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::$lib contains instructions above the baseline:"
+            awk '{ print $1 }' <<<"$bad" | sort | uniq -c
+            exit 1
+          fi
 
       - name: Upload native library
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
