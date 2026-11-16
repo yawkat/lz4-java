@@ -14,13 +14,20 @@ the built libraries instead of trusting the build configuration:
 Usage:
     check_natives.py target/classes/net/jpountz/util
     check_natives.py lz4-java-1.14.0.jar
+    check_natives.py --targets linux/amd64 target/classes/net/jpountz/util
+    check_natives.py --expect-failing linux/amd64,linux/s390x lz4-java-1.13.0.jar
+
+--targets checks only the given os/arch libraries (e.g. those of a single-platform build). --expect-failing inverts the
+result for a self-test: it succeeds only if exactly the given os/arch libraries fail the check.
 
 Disassembling needs a multi-target GNU objdump (binutils-multiarch on Debian/Ubuntu) and, for the macOS libraries,
-llvm-objdump. Use --objdump, --llvm-objdump and --readelf to pick other binaries.
+llvm-objdump (or llvm-objdump-<version>). Use --objdump, --llvm-objdump and --readelf to pick other binaries.
 """
 
 import argparse
+import bisect
 import collections
+import glob
 import os
 import re
 import struct
@@ -82,8 +89,9 @@ def operands(pattern):
     return re.compile(pattern)
 
 
-# Minimum glibc 2.17 (RHEL 7, the first glibc for aarch64 and ppc64le); 2.27 is the first glibc for riscv64
-GLIBC_MAX = {"amd64": (2, 17), "i386": (2, 17), "aarch64": (2, 17), "ppc64le": (2, 17), "s390x": (2, 17),
+# The newest glibc symbol versions the libraries need today (2.17 and 2.27 are the first glibc releases for
+# aarch64/ppc64le and riscv64). Raising one raises the minimum glibc of that platform, so only do it deliberately.
+GLIBC_MAX = {"amd64": (2, 14), "i386": (2, 4), "aarch64": (2, 17), "ppc64le": (2, 17), "s390x": (2, 4),
              "riscv64": (2, 27)}
 LINUX_NEEDED = re.compile(r"^(libc\.so\.6|ld-linux-[a-z0-9_-]+\.so\.[0-9]+|ld64\.so\.[0-9]+)$")
 WINDOWS_IMPORTS = re.compile(r"^(kernel32\.dll|api-ms-win-crt-[a-z0-9-]+\.dll|msvcrt\.dll)$", re.IGNORECASE)
@@ -212,27 +220,46 @@ class Checker:
 
     def check_instructions(self, target, path, objdump, rules):
         disassembly = self.run(objdump, "-d", "--no-show-raw-insn", path)
+        lines = []  # (address, instruction, function)
+        symbols = []
+        function = None
+        for line in disassembly.splitlines():
+            match = re.match(r"^([0-9a-f]+) <(.*)>:$", line)
+            if match:
+                symbols.append(int(match.group(1), 16))
+                function = match.group(2)
+                continue
+            match = re.match(r"^\s*([0-9a-f]+):\s+(\S.*)$", line)
+            if match:
+                # Some objdump targets separate mnemonic and operands with a tab, others with spaces
+                lines.append((int(match.group(1), 16), match.group(2).replace("\t", " ").strip(), function))
+        if not lines:
+            self.error(target, "objdump produced no instructions; does it support this architecture?")
+            return
+
+        # Clang puts x86 jump tables for Mach-O into __text after the function, and the disassembler decodes their
+        # entries as instructions. The function finds a table with a RIP-relative lea; skip from there to the next
+        # symbol.
+        symbols.sort()
+        symbol_set = set(symbols)
+        data = []
+        for _, instruction, _ in lines:
+            match = re.match(r"^lea[lq]? .*\(%rip\).*#+ *(?:0x)?([0-9a-f]+)", instruction)
+            if match:
+                start = int(match.group(1), 16)
+                if start not in symbol_set:
+                    index = bisect.bisect_right(symbols, start)
+                    data.append((start, symbols[index] if index < len(symbols) else float("inf")))
+
         hits = collections.Counter()
         functions = collections.defaultdict(set)
-        function = None
-        instructions = 0
-        for line in disassembly.splitlines():
-            match = re.match(r"^[0-9a-f]+ <(.*)>:$", line)
-            if match:
-                function = match.group(1)
+        for address, instruction, function in lines:
+            if any(start <= address < end for start, end in data):
                 continue
-            match = re.match(r"^\s*[0-9a-f]+:\s+(\S.*)$", line)
-            if not match:
-                continue
-            instructions += 1
-            # Some objdump targets separate mnemonic and operands with a tab, others with spaces
-            instruction = match.group(1).replace("\t", " ").strip()
             if any(rule.search(instruction) for rule in rules):
                 mnemonic = instruction.split(" ")[0]
                 hits[mnemonic] += 1
                 functions[mnemonic].add(function)
-        if instructions == 0:
-            self.error(target, "objdump produced no instructions; does it support this architecture?")
         for mnemonic, count in sorted(hits.items()):
             self.error(target, "%dx %s above the baseline, in %s"
                        % (count, mnemonic, ", ".join(sorted(f or "?" for f in functions[mnemonic])[:5])))
@@ -290,40 +317,54 @@ def version_string(version):
 
 
 def find_libraries(root):
+    """Maps "<os>/<arch>" to the libraries in that directory; libraries anywhere else map to their own path."""
     found = {}
-    for os_id in sorted(os.listdir(root)):
-        if not os.path.isdir(os.path.join(root, os_id)):
-            continue
-        for arch in sorted(os.listdir(os.path.join(root, os_id))):
-            directory = os.path.join(root, os_id, arch)
-            if not os.path.isdir(directory):
-                continue
-            for name in os.listdir(directory):
-                if name.startswith("liblz4-java."):
-                    found.setdefault(os_id + "/" + arch, []).append(os.path.join(directory, name))
+    for directory, _, names in os.walk(root):
+        for name in names:
+            if name.startswith("liblz4-java."):
+                relative = os.path.relpath(directory, root).replace(os.sep, "/")
+                key = relative if relative.count("/") == 1 else relative + "/" + name
+                found.setdefault(key, []).append(os.path.join(directory, name))
     return found
+
+
+def default_llvm_objdump():
+    """llvm-objdump, or the newest llvm-objdump-<version> (as installed by GitHub's Ubuntu runner images)."""
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if os.path.isfile(os.path.join(directory, "llvm-objdump")):
+            return "llvm-objdump"
+    versions = glob.glob("/usr/bin/llvm-objdump-*") + glob.glob("/usr/lib/llvm-*/bin/llvm-objdump")
+    versions.sort(key=lambda path: [int(n) for n in re.findall(r"\d+", path)])
+    return versions[-1] if versions else "llvm-objdump"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", help="net/jpountz/util directory with <os>/<arch>/liblz4-java.* or a lz4-java jar")
     parser.add_argument("--objdump", default="objdump")
-    parser.add_argument("--llvm-objdump", default="llvm-objdump")
+    parser.add_argument("--llvm-objdump", default=None)
     parser.add_argument("--readelf", default="readelf")
+    parser.add_argument("--targets", help="comma-separated os/arch libraries to check instead of all")
+    parser.add_argument("--expect-failing", help="comma-separated os/arch libraries that must fail (self-test)")
     args = parser.parse_args()
+    targets = set(args.targets.split(",")) if args.targets else set(TARGETS)
+    if not targets <= set(TARGETS):
+        parser.error("unknown targets: %s" % ", ".join(sorted(targets - set(TARGETS))))
 
     with tempfile.TemporaryDirectory() as temp:
         root = args.path
         if os.path.isfile(root):
             with zipfile.ZipFile(root) as jar:
                 for name in jar.namelist():
-                    if re.match(r"^net/jpountz/util/[^/]+/[^/]+/liblz4-java\.[a-z]+$", name):
+                    if name.startswith("net/jpountz/util/") and os.path.basename(name).startswith("liblz4-java."):
                         jar.extract(name, temp)
             root = os.path.join(temp, "net", "jpountz", "util")
 
-        checker = Checker(args.objdump, args.llvm_objdump, args.readelf)
+        checker = Checker(args.objdump, args.llvm_objdump or default_llvm_objdump(), args.readelf)
         found = find_libraries(root) if os.path.isdir(root) else {}
-        for target in sorted(set(found) | set(TARGETS)):
+        if args.targets:
+            found = {target: paths for target, paths in found.items() if target in targets}
+        for target in sorted(set(found) | targets):
             os_id = target.split("/")[0]
             expected = "liblz4-java." + EXTENSIONS.get(os_id, "?")
             paths = found.get(target, [])
@@ -338,12 +379,27 @@ def main():
                 except (OSError, subprocess.CalledProcessError) as e:
                     checker.error(target, "could not inspect %s: %s" % (paths[0], e))
 
+    if args.expect_failing is not None:
+        expected = set(filter(None, args.expect_failing.split(",")))
+        failing = {target for target, _ in checker.errors}
+        for target, message in checker.errors:
+            print("expected failure %s: %s" % (target, message))
+        if failing != expected:
+            report("self-test: expected failures in %s, got %s"
+                   % (", ".join(sorted(expected)) or "nothing", ", ".join(sorted(failing)) or "nothing"))
+            return 1
+        return 0
+
     for target, message in checker.errors:
-        if os.environ.get("GITHUB_ACTIONS") == "true":
-            print("::error::%s: %s" % (target, message))
-        else:
-            print("ERROR %s: %s" % (target, message), file=sys.stderr)
+        report("%s: %s" % (target, message))
     return 1 if checker.errors else 0
+
+
+def report(message):
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print("::error::" + message)
+    else:
+        print("ERROR " + message, file=sys.stderr)
 
 
 if __name__ == "__main__":
