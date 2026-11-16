@@ -18,7 +18,9 @@ permissions:
 jobs:
   linux:
     name: Linux natives (${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: Ubuntu 26.04 targets x86-64-v3 and RVA23 by default, in its GCC and in the libgcc and crt
+    # objects linked into the library, so the natives would crash with SIGILL on many CPUs (#186).
+    runs-on: ubuntu-24.04
     env:
       NATIVE_BASE_CFLAGS: -O2 -fno-omit-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security
       NATIVE_XXHASH_EXTRA_CFLAGS: -fno-tree-vectorize
@@ -319,6 +321,28 @@ jobs:
               echo "Unexpected architecture for $dir" >&2; failed=1
             fi
           done
+          exit "$failed"
+
+      # Fails if the linux job's toolchain raised the CPU baseline (#186).
+      - name: Check native library CPU baseline
+        shell: bash
+        run: |
+          root=target/classes/net/jpountz/util/linux
+          failed=0
+          # amd64 must not use what x86-64-v3 added: AVX (VEX-encoded, v-prefixed), BMI1/2, LZCNT, MOVBE.
+          bad="$(objdump -d --no-show-raw-insn "$root/amd64/liblz4-java.so" \
+            | awk -F'\t' '/^ *[0-9a-f]+:/ { split($2, m, " "); print m[1] }' \
+            | grep -Ex '(v[a-z0-9]+|andn|bextr|blsi|blsmsk|blsr|bzhi|lzcnt|movbe|pdep|pext|rorx|sarx|shlx|shrx)[lq]?' \
+            | sort -u | tr '\n' ' ')" || true
+          echo "linux/amd64 instructions above x86-64: ${bad:-none}"
+          [ -z "$bad" ] || failed=1
+          # riscv64 must only use RV64GC extensions. The linker merges this tag from every input, libgcc and crt included.
+          isa="$(readelf -A "$root/riscv64/liblz4-java.so" | sed -n 's/.*Tag_RISCV_arch: "\(.*\)"/\1/p')"
+          echo "linux/riscv64 Tag_RISCV_arch: ${isa:-missing}"
+          extra="$(tr _ '\n' <<<"${isa#rv64}" | sed -E 's/[0-9]+p[0-9]+$//' \
+            | grep -vEx 'i|m|a|f|d|c|zicsr|zifencei|zmmul' | tr '\n' ' ')" || true
+          echo "linux/riscv64 extensions above RV64GC: ${extra:-none}"
+          [ -n "$isa" ] && [ -z "$extra" ] || failed=1
           exit "$failed"
 
       # with maven central
