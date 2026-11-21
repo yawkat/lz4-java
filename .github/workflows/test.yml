@@ -29,6 +29,7 @@ jobs:
             # Disable fuzzing until https://github.com/CodeIntelligenceTesting/jazzer supports linux-riscv64
             maven-flags: >-
               -Dtest='!net/jpountz/fuzz/*'
+              -Dit.test='!net/jpountz/fuzz/*'
               -Dmaven.compiler.source=8
               -Dmaven.compiler.target=8
     steps:

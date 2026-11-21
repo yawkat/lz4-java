@@ -188,6 +188,24 @@
               </jdkToolchain>
             </configuration>
           </execution>
+          <!-- Java 9+ variant of net.jpountz.util.ByteArrays, loaded from META-INF/versions/9 of the multi-release jar -->
+          <execution>
+            <id>compile-java9</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <release>9</release>
+              <compileSourceRoots>
+                <compileSourceRoot>${project.basedir}/src/java9</compileSourceRoot>
+              </compileSourceRoots>
+              <multiReleaseOutput>true</multiReleaseOutput>
+              <encoding>${project.build.sourceEncoding}</encoding>
+              <debug>true</debug>
+              <fork>true</fork>
+            </configuration>
+          </execution>
           <execution>
             <id>default-testCompile</id>
             <phase>test-compile</phase>
@@ -213,6 +231,7 @@
             <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
             <manifestEntries>
               <Automatic-Module-Name>org.lz4.java</Automatic-Module-Name>
+              <Multi-Release>true</Multi-Release>
             </manifestEntries>
           </archive>
         </configuration>
@@ -276,6 +295,29 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.6.1</version>
+      </plugin>
+      <!-- Surefire tests target/classes, where Java 9+ does not apply META-INF/versions. Rerun the tests against the
+           multi-release jar so the Java 9+ ByteArrays is tested too. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <includes>
+            <include>**/*Test.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <lz4.testJar>true</lz4.testJar>
+          </systemPropertyVariables>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -363,6 +405,12 @@
                 <goals>
                   <goal>report</goal>
                 </goals>
+                <configuration>
+                  <!-- A report cannot hold two classes of the same name; this skips the Java 9+ ByteArrays -->
+                  <excludes>
+                    <exclude>META-INF/versions/**</exclude>
+                  </excludes>
+                </configuration>
               </execution>
             </executions>
           </plugin>
@@ -789,6 +837,7 @@
         <native.cflags>-O1 -g -fPIC -fno-omit-frame-pointer</native.cflags>
         <native.ldflags></native.ldflags>
         <jazzer.max_duration>5s</jazzer.max_duration>
+        <skipITs>true</skipITs>
       </properties>
       <build>
         <plugins>

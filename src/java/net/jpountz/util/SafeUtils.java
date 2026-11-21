@@ -16,8 +16,6 @@ package net.jpountz.util;
  * limitations under the License.
  */
 
-import java.nio.ByteOrder;
-
 /** <b>FOR INTERNAL USE ONLY</b> */
 public enum SafeUtils {
   ;
@@ -47,29 +45,23 @@ public enum SafeUtils {
   }
 
   public static int readIntBE(byte[] buf, int i) {
-    return ((buf[i] & 0xFF) << 24) | ((buf[i + 1] & 0xFF) << 16) | ((buf[i + 2] & 0xFF) << 8) | (buf[i + 3] & 0xFF);
+    return ByteArrays.readIntBE(buf, i);
   }
 
   public static int readIntLE(byte[] buf, int i) {
-    return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8) | ((buf[i + 2] & 0xFF) << 16) | ((buf[i + 3] & 0xFF) << 24);
+    return ByteArrays.readIntLE(buf, i);
   }
 
   public static int readInt(byte[] buf, int i) {
-    if (Utils.NATIVE_BYTE_ORDER == ByteOrder.BIG_ENDIAN) {
-      return readIntBE(buf, i);
-    } else {
-      return readIntLE(buf, i);
-    }
+    return ByteArrays.readInt(buf, i);
   }
 
   public static long readLongLE(byte[] buf, int i) {
-    return (buf[i] & 0xFFL) | ((buf[i + 1] & 0xFFL) << 8) | ((buf[i + 2] & 0xFFL) << 16) | ((buf[i + 3] & 0xFFL) << 24)
-      | ((buf[i + 4] & 0xFFL) << 32) | ((buf[i + 5] & 0xFFL) << 40) | ((buf[i + 6] & 0xFFL) << 48) | ((buf[i + 7] & 0xFFL) << 56);
+    return ByteArrays.readLongLE(buf, i);
   }
 
   public static void writeShortLE(byte[] buf, int off, int v) {
-    buf[off++] = (byte) v;
-    buf[off++] = (byte) (v >>> 8);
+    ByteArrays.writeShortLE(buf, off, v);
   }
 
   public static void writeInt(int[] buf, int off, int v) {
@@ -89,7 +81,7 @@ public enum SafeUtils {
   }
 
   public static int readShortLE(byte[] buf, int i) {
-    return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8);
+    return ByteArrays.readShortLE(buf, i);
   }
 
   public static int readShort(short[] buf, int off) {
