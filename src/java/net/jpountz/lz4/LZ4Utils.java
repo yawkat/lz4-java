@@ -56,16 +56,27 @@ enum LZ4Utils {
    * @throws EOFException if the stream ends before {@code len} bytes were read
    */
   static byte[] readFullyGrowing(InputStream in, byte[] buf, int len, int maxLen) throws IOException {
-    int read = 0;
-    while (read < len) {
-      if (read == buf.length) {
-        buf = Arrays.copyOf(buf, grownLength(buf.length, Math.min(len, MIN_GROWN_BUFFER_SIZE), maxLen));
+    return readFullyGrowing(in, buf, 0, len, maxLen);
+  }
+
+  /**
+   * Same as {@link #readFullyGrowing(InputStream, byte[], int, int)}, but reads into {@code buf} at {@code off}. A
+   * grown buffer keeps the first {@code off} bytes of {@code buf}.
+   *
+   * @param maxLen the largest {@code off + len} of any read into this buffer
+   */
+  static byte[] readFullyGrowing(InputStream in, byte[] buf, int off, int len, int maxLen) throws IOException {
+    final int end = off + len;
+    int pos = off;
+    while (pos < end) {
+      if (pos == buf.length) {
+        buf = Arrays.copyOf(buf, grownLength(buf.length, off + Math.min(len, MIN_GROWN_BUFFER_SIZE), maxLen));
       }
-      final int r = in.read(buf, read, Math.min(len, buf.length) - read);
+      final int r = in.read(buf, pos, Math.min(end, buf.length) - pos);
       if (r < 0) {
         throw new EOFException("Stream ended prematurely");
       }
-      read += r;
+      pos += r;
     }
     return buf;
   }

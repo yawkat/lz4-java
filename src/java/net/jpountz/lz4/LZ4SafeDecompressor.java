@@ -62,6 +62,19 @@ public abstract class LZ4SafeDecompressor implements LZ4UnknownSizeDecompressor 
   public abstract int decompress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff, int maxDestLen);
 
   /**
+   * Same as {@link #decompress(byte[], int, int, byte[], int, int)}, but the compressed data may also reference the
+   * <code>prefixLen</code> bytes before <code>destOff</code> in <code>dest</code>, which hold the data decompressed
+   * before it. The linked blocks of the LZ4 frame format need this. Implementations outside of this package don't
+   * support a prefix.
+   */
+  int decompressWithPrefix(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen, int prefixLen) {
+    if (prefixLen != 0) {
+      throw new LZ4Exception(getClass().getName() + " does not support linked blocks");
+    }
+    return decompress(src, srcOff, srcLen, dest, destOff, maxDestLen);
+  }
+
+  /**
    * Convenience method, equivalent to calling
    * {@link #decompress(byte[], int, int, byte[], int, int) decompress(src, srcOff, srcLen, dest, destOff, dest.length - destOff)}.
    *

@@ -29,6 +29,7 @@ import java.nio.ByteOrder;
 import java.util.Locale;
 
 import static net.jpountz.lz4.LZ4Constants.MAX_COMPRESSION_RATIO;
+import static net.jpountz.lz4.LZ4Constants.MAX_DISTANCE;
 import static net.jpountz.lz4.LZ4Utils.notEnoughSpace;
 
 /**
@@ -37,7 +38,6 @@ import static net.jpountz.lz4.LZ4Utils.notEnoughSpace;
  * this stream throws an {@link IOException} as well.
  * <p>
  * Not Supported:<ul>
- * <li>Dependent blocks</li>
  * <li>Legacy streams</li>
  * </ul>
  * <p>
@@ -316,10 +316,10 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
   }
 
-  // Reads the data of a block of the given length, growing buf as the data arrives
-  private byte[] readBlockData(byte[] buf, int len) throws IOException {
+  // Reads the data of a block of the given length into buf at off, growing buf as the data arrives
+  private byte[] readBlockData(byte[] buf, int off, int len, int maxLen) throws IOException {
     try {
-      return LZ4Utils.readFullyGrowing(in, buf == null ? EMPTY : buf, len, maxBlockSize);
+      return LZ4Utils.readFullyGrowing(in, buf == null ? EMPTY : buf, off, len, maxLen);
     } catch (EOFException e) {
       // report truncation like the other parts of the frame do, not as an EOFException that callers may take for a
       // clean end of data
@@ -333,6 +333,16 @@ public class LZ4FrameInputStream extends FilterInputStream {
       buffer = ByteBuffer.wrap(rawBuffer);
       buffer.limit(0); // don't expose buffer contents if this block fails
     }
+  }
+
+  // Linked blocks: if fewer than len bytes follow blockOff in rawBuffer, moves the prefixLen bytes of history before
+  // blockOff to the start of rawBuffer. Returns the offset of the block, right after the history.
+  private int makeRoom(int blockOff, int prefixLen, int len) {
+    if (blockOff > prefixLen && notEnoughSpace(rawBuffer.length - blockOff, len)) {
+      System.arraycopy(rawBuffer, blockOff - prefixLen, rawBuffer, 0, prefixLen);
+      return prefixLen;
+    }
+    return blockOff;
   }
 
   private IOException fail(IOException e) {
@@ -374,21 +384,36 @@ public class LZ4FrameInputStream extends FilterInputStream {
       throw new IOException(String.format(Locale.ROOT, "Block size %s exceeded max: %s", blockSize, maxBlockSize));
     }
 
+    // Independent blocks are decoded at the start of rawBuffer. Linked blocks may reference up to 64 KB of the data
+    // decoded before them in the frame, so they are decoded after it. This data ends at buffer.limit().
+    int blockOff = 0;
+    int prefixLen = 0;
+    int maxRawBufferSize = maxBlockSize;
+    if (!frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE)) {
+      blockOff = buffer.limit();
+      prefixLen = Math.min(blockOff, MAX_DISTANCE);
+      maxRawBufferSize = MAX_DISTANCE + maxBlockSize;
+    }
+
     // The block size comes from the untrusted input, so the buffers are only allocated as the block data actually
     // arrives. They may be larger than maxBlockSize if a previous frame had a larger block size. Never shrink them.
     final byte[] tmpBuffer;
+    final int tmpOff;
     if (compressed) {
-      compressedBuffer = readBlockData(compressedBuffer, blockSize);
+      compressedBuffer = readBlockData(compressedBuffer, 0, blockSize, maxBlockSize);
       tmpBuffer = compressedBuffer;
+      tmpOff = 0;
     } else {
-      setRawBuffer(readBlockData(rawBuffer, blockSize));
+      blockOff = makeRoom(blockOff, prefixLen, blockSize);
+      setRawBuffer(readBlockData(rawBuffer, blockOff, blockSize, maxRawBufferSize));
       tmpBuffer = rawBuffer;
+      tmpOff = blockOff;
     }
 
     // verify block checksum
     if (frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.BLOCK_CHECKSUM)) {
       final int hashCheck = readInt(in);
-      if (hashCheck != checksum.hash(tmpBuffer, 0, blockSize, 0)) {
+      if (hashCheck != checksum.hash(tmpBuffer, tmpOff, blockSize, 0)) {
         throw new IOException(BLOCK_HASH_MISMATCH);
       }
     }
@@ -397,12 +422,23 @@ public class LZ4FrameInputStream extends FilterInputStream {
     if (compressed) {
       // the block cannot decompress to more than the maximum compression ratio allows
       final int maxDecompressedSize = (int) Math.min(maxBlockSize, (long) blockSize * MAX_COMPRESSION_RATIO);
-      if (rawBuffer == null || rawBuffer.length < maxDecompressedSize) {
+      blockOff = makeRoom(blockOff, prefixLen, maxDecompressedSize);
+      if (rawBuffer == null || notEnoughSpace(rawBuffer.length - blockOff, maxDecompressedSize)) {
+        // the history, if any, is now at the start of rawBuffer
         final int oldLength = rawBuffer == null ? 0 : rawBuffer.length;
-        setRawBuffer(new byte[LZ4Utils.grownLength(oldLength, maxDecompressedSize, maxBlockSize)]);
+        final byte[] grown = new byte[LZ4Utils.grownLength(oldLength, blockOff + maxDecompressedSize, maxRawBufferSize)];
+        if (blockOff > 0) {
+          System.arraycopy(rawBuffer, 0, grown, 0, blockOff);
+        }
+        setRawBuffer(grown);
       }
       try {
-        currentBufferSize = decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, 0, maxDecompressedSize);
+        // Without history (independent blocks, first linked block), decompress as before. This also keeps working with
+        // an older native library loaded from java.library.path.
+        currentBufferSize = prefixLen == 0
+            ? decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, blockOff, maxDecompressedSize)
+            : decompressor.decompressWithPrefix(tmpBuffer, 0, blockSize, rawBuffer, blockOff, maxDecompressedSize,
+                prefixLen);
       } catch (LZ4Exception e) {
         throw new IOException(e);
       }
@@ -410,11 +446,11 @@ public class LZ4FrameInputStream extends FilterInputStream {
       currentBufferSize = blockSize;
     }
     if (frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_CHECKSUM)) {
-      frameInfo.updateStreamHash(rawBuffer, 0, currentBufferSize);
+      frameInfo.updateStreamHash(rawBuffer, blockOff, currentBufferSize);
     }
     totalContentSize += currentBufferSize;
-    buffer.limit(currentBufferSize);
-    buffer.rewind();
+    buffer.limit(blockOff + currentBufferSize);
+    buffer.position(blockOff);
   }
 
   @Override

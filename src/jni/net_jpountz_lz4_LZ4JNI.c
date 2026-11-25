@@ -295,6 +295,57 @@ JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1decompress_1safe
 
 /*
  * Class:     net_jpountz_lz4_LZ4JNI
+ * Method:    LZ4_decompress_safe_usingDict
+ * Signature: ([BLjava/nio/ByteBuffer;II[BLjava/nio/ByteBuffer;III)I
+ */
+JNIEXPORT jint JNICALL Java_net_jpountz_lz4_LZ4JNI_LZ4_1decompress_1safe_1usingDict
+  (JNIEnv *env, jclass cls, jbyteArray srcArray, jobject srcBuffer, jint srcOff, jint srcLen, jbyteArray destArray, jobject destBuffer, jint destOff, jint maxDestLen, jint dictLen) {
+
+  char* in;
+  char* out;
+  jint decompressed;
+
+  if (srcArray != NULL) {
+    in = (char*) (*env)->GetPrimitiveArrayCritical(env, srcArray, 0);
+  } else {
+    in = (char*) (*env)->GetDirectBufferAddress(env, srcBuffer);
+  }
+
+  if (in == NULL) {
+    throw_OOM(env);
+    return 0;
+  }
+
+  if (destArray != NULL) {
+    out = (char*) (*env)->GetPrimitiveArrayCritical(env, destArray, 0);
+  } else {
+    out = (char*) (*env)->GetDirectBufferAddress(env, destBuffer);
+  }
+
+  if (out == NULL) {
+    if (srcArray != NULL) {
+      (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+    }
+    throw_OOM(env);
+    return 0;
+  }
+
+  // The dictionary immediately precedes the output, so liblz4 uses it in place as a prefix
+  decompressed = LZ4_decompress_safe_usingDict(in + srcOff, out + destOff, srcLen, maxDestLen, out + destOff - dictLen, dictLen);
+
+  if (srcArray != NULL) {
+    (*env)->ReleasePrimitiveArrayCritical(env, srcArray, in, 0);
+  }
+  if (destArray != NULL) {
+    (*env)->ReleasePrimitiveArrayCritical(env, destArray, out, 0);
+  }
+
+  return decompressed;
+
+}
+
+/*
+ * Class:     net_jpountz_lz4_LZ4JNI
  * Method:    LZ4_compressBound
  * Signature: (I)I
  */

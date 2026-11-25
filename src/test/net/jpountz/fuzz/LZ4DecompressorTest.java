@@ -4,6 +4,8 @@ import com.code_intelligence.jazzer.api.FuzzedDataProvider;
 import com.code_intelligence.jazzer.junit.FuzzTest;
 import net.jpountz.lz4.LZ4Exception;
 import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.lz4.LZ4SafeDecompressor;
+import net.jpountz.lz4.LZ4TestAccess;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -57,6 +59,56 @@ public class LZ4DecompressorTest {
       }
     } catch (LZ4Exception ignored) {
     }
+  }
+
+  // Linked blocks: the input may also reference the prefixLen bytes before the output. Decompresses twice, with
+  // different data before the prefix and after the output, and compares: the decompressor must not read them.
+  private void testPrefix(FuzzedDataProvider data, LZ4Factory factory) {
+    // up to twice the 64 KB window, so that liblz4 takes both of its prefix paths
+    int prefixLen = data.consumeInt(0, 1 << 17);
+    int garbageLen = data.consumeInt(0, 16);
+    int destLen = data.consumeInt(0, MAX_LEN);
+    byte seed = data.consumeByte();
+    byte[] src = data.consumeRemainingAsBytes();
+    int destOff = garbageLen + prefixLen;
+    byte[] dest1 = new byte[destOff + destLen];
+    byte[] dest2 = new byte[destOff + destLen];
+    Arrays.fill(dest2, (byte) 'x');
+    for (int i = 0; i < prefixLen; i++) {
+      dest1[garbageLen + i] = dest2[garbageLen + i] = (byte) (seed + i * 31);
+    }
+    LZ4SafeDecompressor decompressor = factory.safeDecompressor();
+    int n1;
+    try {
+      n1 = LZ4TestAccess.decompressWithPrefix(decompressor, src, 0, src.length, dest1, destOff, destLen, prefixLen);
+    } catch (LZ4Exception e) {
+      n1 = -1;
+    }
+    int n2;
+    try {
+      n2 = LZ4TestAccess.decompressWithPrefix(decompressor, src, 0, src.length, dest2, destOff, destLen, prefixLen);
+    } catch (LZ4Exception e) {
+      n2 = -1;
+    }
+    assertEquals(n1, n2);
+    if (n1 >= 0) {
+      assertArrayEquals(Arrays.copyOfRange(dest1, destOff, destOff + n1), Arrays.copyOfRange(dest2, destOff, destOff + n2));
+    }
+  }
+
+  @FuzzTest
+  public void safe_prefix(FuzzedDataProvider provider) {
+    testPrefix(provider, LZ4Factory.safeInstance());
+  }
+
+  @FuzzTest
+  public void unsafe_prefix(FuzzedDataProvider provider) {
+    testPrefix(provider, LZ4Factory.unsafeInsecureInstance());
+  }
+
+  @FuzzTest
+  public void native_prefix(FuzzedDataProvider provider) {
+    testPrefix(provider, LZ4Factory.nativeInstance());
   }
 
   @FuzzTest

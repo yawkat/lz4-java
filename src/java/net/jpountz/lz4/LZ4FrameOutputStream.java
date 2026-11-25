@@ -340,6 +340,10 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
         }
       }
       validate();
+      // LZ4FrameOutputStream only writes independent blocks. LZ4FrameInputStream reads both, through fromByte.
+      if (!bitSet.get(Bits.BLOCK_INDEPENDENCE.position)) {
+        throw new RuntimeException("Dependent block stream is unsupported (BLOCK_INDEPENDENCE must be set)");
+      }
     }
 
     private FLG(int version, byte b) {
@@ -363,9 +367,6 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
       }
       if (bitSet.get(Bits.RESERVED_1.position)) {
         throw new RuntimeException("Reserved1 field must be 0");
-      }
-      if (!bitSet.get(Bits.BLOCK_INDEPENDENCE.position)) {
-        throw new RuntimeException("Dependent block stream is unsupported (BLOCK_INDEPENDENCE must be set)");
       }
       if (version != DEFAULT_VERSION) {
         throw new RuntimeException(String.format(Locale.ROOT, "Version %d is unsupported", version));

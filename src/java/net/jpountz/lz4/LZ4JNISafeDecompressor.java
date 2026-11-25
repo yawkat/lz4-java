@@ -58,6 +58,18 @@ final class LZ4JNISafeDecompressor extends LZ4SafeDecompressor {
   }
 
   @Override
+  final int decompressWithPrefix(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen, int prefixLen) {
+    SafeUtils.checkRange(src, srcOff, srcLen);
+    SafeUtils.checkRange(dest, destOff, maxDestLen);
+    SafeUtils.checkRange(dest, destOff - prefixLen, prefixLen);
+    final int result = LZ4JNI.LZ4_decompress_safe_usingDict(src, null, srcOff, srcLen, dest, null, destOff, maxDestLen, prefixLen);
+    if (result < 0) {
+      throw new LZ4Exception(errorMessage(result));
+    }
+    return result;
+  }
+
+  @Override
   public int decompress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff, int maxDestLen) {
     ByteBufferUtils.checkNotReadOnly(dest);
     ByteBufferUtils.checkRange(src, srcOff, srcLen);

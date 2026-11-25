@@ -17,9 +17,13 @@ final class LZ4Java@{type}${size}Decompressor extends LZ4${size}Decompressor {
 
   public static final LZ4${size}Decompressor INSTANCE = new LZ4Java${type}${size}Decompressor();
 
-@include{"decompress.template"; storage = "byte[]"; utils = "${type}Utils"}
+@include{"decompress.template"; storage = "byte[]"; utils = "${type}Utils"; prefix = false}
 
-@include{"decompress.template"; storage = "ByteBuffer"; utils = "ByteBufferUtils"}
+@include{"decompress.template"; storage = "ByteBuffer"; utils = "ByteBufferUtils"; prefix = false}
+@if{ size == "Safe" }
+
+@include{"decompress.template"; storage = "byte[]"; utils = "${type}Utils"; prefix = true}
+@end{}
 
 
 }
