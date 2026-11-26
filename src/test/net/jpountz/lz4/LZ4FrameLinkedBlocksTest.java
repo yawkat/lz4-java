@@ -451,6 +451,31 @@ public class LZ4FrameLinkedBlocksTest {
     assertTrue(stats.maxBufferLength <= 2 * (1 << 16) + w.maxBlockSize(), "buffer: " + stats.maxBufferLength);
   }
 
+  @ParameterizedTest
+  @MethodSource("decompressors")
+  public void emptyUncompressedBlocksDontEndTheFrame(LZ4SafeDecompressor decompressor) throws IOException {
+    // A block header of 0x80000000 is an empty uncompressed block, such as a keep-alive. Only 0 is an EndMark.
+    final Random rnd = new Random(8);
+    for (int flg : new int[] {FLG_VERSION, FLG_VERSION | FLG_BLOCK_INDEPENDENCE}) {
+      for (int options : new int[] {0, FLG_BLOCK_CHECKSUM | FLG_CONTENT_CHECKSUM}) {
+        final FrameWriter w = new FrameWriter(flg | options, BD_64KB)
+            .uncompressedBlock(new byte[0])
+            .uncompressedBlock(randomBytes(rnd, 100))
+            .uncompressedBlock(new byte[0])
+            .uncompressedBlock(new byte[0]);
+        if ((flg & FLG_BLOCK_INDEPENDENCE) == 0) {
+          // the history continues across empty blocks
+          w.sequence(new byte[0], 100, 50).lastLiterals(randomBytes(rnd, 12));
+        } else {
+          w.sequence(randomBytes(rnd, 10), 10, 50).lastLiterals(randomBytes(rnd, 12));
+        }
+        w.uncompressedBlock(new byte[0]);
+        assertArrayEquals(w.content.toByteArray(), decode(w.toByteArray(), decompressor),
+            "FLG " + Integer.toHexString(flg | options));
+      }
+    }
+  }
+
   @Test
   public void flgRoundTrips() {
     int accepted = 0;

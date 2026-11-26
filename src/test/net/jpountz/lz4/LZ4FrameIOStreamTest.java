@@ -861,11 +861,13 @@ public class LZ4FrameIOStreamTest {
       }
 
       final ByteBuffer buffer = ByteBuffer.wrap(bytes);
-      // Make sure final "block" is a zero length block, then set it to an incompressible zero length block.
+      // Make sure final "block" is a zero length block, then set it to an incompressible zero length block. This is an
+      // empty block rather than an EndMark, so the frame is truncated.
       Assert.assertEquals(0, buffer.getInt(bytes.length - (Integer.SIZE >> 3)));
       buffer.putInt(bytes.length - (Integer.SIZE >> 3), LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK);
       try (final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
         Assert.assertEquals(data, (byte) is.read());
+        Assert.assertThrows(IOException.class, is::read);
       }
     }
   }

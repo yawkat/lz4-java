@@ -364,12 +364,12 @@ public class LZ4FrameInputStream extends FilterInputStream {
       // the content checksum hash was released by close()
       throw new IOException("Stream closed");
     }
-    int blockSize = readInt(in);
-    final boolean compressed = (blockSize & LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK) == 0;
-    blockSize &= ~LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK;
+    final int blockHeader = readInt(in);
+    final boolean compressed = (blockHeader & LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK) == 0;
+    final int blockSize = blockHeader & ~LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK;
 
-    // Check for EndMark
-    if (blockSize == 0) {
+    // Check for EndMark. Only 0 is an EndMark: 0x80000000 is an empty uncompressed block, which doesn't end the frame.
+    if (blockHeader == 0) {
       if (frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.CONTENT_CHECKSUM)) {
         final int contentChecksum = readInt(in);
         if (contentChecksum != frameInfo.currentStreamHash()) {
