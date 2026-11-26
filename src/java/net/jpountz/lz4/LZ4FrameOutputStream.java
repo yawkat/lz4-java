@@ -353,8 +353,7 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
     }
 
     public static FLG fromByte(byte flg) {
-      final byte versionMask = (byte) (flg & (3 << 6));
-      return new FLG(versionMask >>> 6, (byte) (flg ^ versionMask));
+      return new FLG((flg >> 6) & 3, (byte) (flg & 0x3F));
     }
 
     public byte toByte() {

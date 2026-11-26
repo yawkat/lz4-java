@@ -459,6 +459,9 @@ public class LZ4FrameLinkedBlocksTest {
       try {
         flg = LZ4FrameOutputStream.FLG.fromByte((byte) b);
       } catch (RuntimeException e) {
+        if ((b & 3) == 0) { // only the version is wrong
+          assertEquals("Version " + (b >>> 6) + " is unsupported", e.getMessage());
+        }
         continue;
       }
       accepted++;
