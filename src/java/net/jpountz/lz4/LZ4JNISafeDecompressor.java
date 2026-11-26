@@ -62,7 +62,14 @@ final class LZ4JNISafeDecompressor extends LZ4SafeDecompressor {
     SafeUtils.checkRange(src, srcOff, srcLen);
     SafeUtils.checkRange(dest, destOff, maxDestLen);
     SafeUtils.checkRange(dest, destOff - prefixLen, prefixLen);
-    final int result = LZ4JNI.LZ4_decompress_safe_usingDict(src, null, srcOff, srcLen, dest, null, destOff, maxDestLen, prefixLen);
+    final int result;
+    try {
+      result = LZ4JNI.LZ4_decompress_safe_usingDict(src, null, srcOff, srcLen, dest, null, destOff, maxDestLen, prefixLen);
+    } catch (UnsatisfiedLinkError e) {
+      // an older native library loaded from java.library.path lacks this function. Linked blocks were unsupported
+      // before it was added, so fail like other unsupported input rather than with an Error.
+      throw new LZ4Exception("The loaded native library does not support linked blocks", e);
+    }
     if (result < 0) {
       throw new LZ4Exception(errorMessage(result));
     }

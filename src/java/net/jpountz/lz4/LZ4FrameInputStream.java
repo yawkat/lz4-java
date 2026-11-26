@@ -434,7 +434,8 @@ public class LZ4FrameInputStream extends FilterInputStream {
       }
       try {
         // Without history (independent blocks, first linked block), decompress as before. This also keeps working with
-        // an older native library loaded from java.library.path.
+        // an older native library loaded from java.library.path. With such a library, decompressing with history
+        // fails with an LZ4Exception, so linked blocks after the first fail with an IOException.
         currentBufferSize = prefixLen == 0
             ? decompressor.decompress(tmpBuffer, 0, blockSize, rawBuffer, blockOff, maxDecompressedSize)
             : decompressor.decompressWithPrefix(tmpBuffer, 0, blockSize, rawBuffer, blockOff, maxDecompressedSize,
