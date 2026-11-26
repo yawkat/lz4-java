@@ -358,7 +358,9 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
     }
 
     public byte toByte() {
-      return (byte) (bitSet.toByteArray()[0] | ((version & 3) << 6));
+      // toByteArray() is empty if no bit is set, which fromByte allows for linked blocks
+      final byte[] bits = bitSet.toByteArray();
+      return (byte) ((bits.length == 0 ? 0 : bits[0]) | ((version & 3) << 6));
     }
 
     private void validate() {

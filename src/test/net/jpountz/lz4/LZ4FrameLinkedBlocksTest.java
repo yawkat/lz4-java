@@ -416,6 +416,23 @@ public class LZ4FrameLinkedBlocksTest {
   }
 
   @Test
+  public void flgRoundTrips() {
+    int accepted = 0;
+    for (int b = 0; b < 256; b++) {
+      final LZ4FrameOutputStream.FLG flg;
+      try {
+        flg = LZ4FrameOutputStream.FLG.fromByte((byte) b);
+      } catch (RuntimeException e) {
+        continue;
+      }
+      accepted++;
+      assertEquals((byte) b, flg.toByte(), "FLG " + Integer.toHexString(b));
+    }
+    // version 01, no dictionary ID, reserved bit unset: the other 4 bits are free, including B.Indep
+    assertEquals(16, accepted);
+  }
+
+  @Test
   public void decompressorsOutsideThisPackageRejectAPrefix() throws IOException {
     final LZ4SafeDecompressor safe = LZ4Factory.safeInstance().safeDecompressor();
     // does not override decompressWithPrefix, like a subclass outside of this package
