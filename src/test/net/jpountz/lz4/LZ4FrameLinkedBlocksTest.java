@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -365,54 +366,89 @@ public class LZ4FrameLinkedBlocksTest {
     }
   }
 
+  /** What decoding a frame did with the buffer of LZ4FrameInputStream. */
+  private static final class BufferStats {
+    final ByteArrayOutputStream content = new ByteArrayOutputStream();
+    // linked blocks not decoded right after the previous block: the history was moved before them
+    int moves;
+    int maxBufferLength;
+  }
+
+  // Decodes one block per read, and looks at where the stream decoded it in its buffer
+  private static BufferStats decodeTracking(byte[] frame, LZ4SafeDecompressor decompressor) throws Exception {
+    final Field bufferField = LZ4FrameInputStream.class.getDeclaredField("buffer");
+    bufferField.setAccessible(true);
+    final BufferStats stats = new BufferStats();
+    try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame), decompressor, XXH32)) {
+      final byte[] buf = new byte[1 << 22]; // a whole block of any size
+      int previousEnd = -1;
+      for (int n; (n = is.read(buf)) != -1; ) {
+        final ByteBuffer buffer = (ByteBuffer) bufferField.get(is);
+        assertEquals(0, buffer.remaining(), "the block was not read at once");
+        final int blockOff = buffer.limit() - n;
+        if (previousEnd >= 0 && blockOff != previousEnd) {
+          stats.moves++;
+        }
+        previousEnd = buffer.limit();
+        stats.maxBufferLength = Math.max(stats.maxBufferLength, buffer.capacity());
+        stats.content.write(buf, 0, n);
+      }
+    }
+    return stats;
+  }
+
+  // Checks that the history was moved, but at most once per 64 KB decoded, and that the buffer stayed within
+  // 2 * 64 KB + the maximum block size
+  private static void assertHistoryMovesBounded(FrameWriter w, LZ4SafeDecompressor decompressor) throws Exception {
+    final BufferStats stats = decodeTracking(w.toByteArray(), decompressor);
+    assertArrayEquals(w.content.toByteArray(), stats.content.toByteArray());
+    assertTrue(stats.moves > 0 && stats.moves <= w.content.size / (1 << 16), "moves: " + stats.moves);
+    assertTrue(stats.maxBufferLength <= 2 * (1 << 16) + w.maxBlockSize(), "buffer: " + stats.maxBufferLength);
+  }
+
   @ParameterizedTest
   @MethodSource("decompressors")
-  public void historyIsMovedOncePer64KB(LZ4SafeDecompressor decompressor) throws IOException {
-    // records where blocks with history are decoded, and where they end: the history was moved when a block is not
-    // decoded right after the previous one
-    final List<Integer> destOffs = new ArrayList<>();
-    final List<Integer> destEnds = new ArrayList<>();
-    final LZ4SafeDecompressor recording = new LZ4SafeDecompressor() {
-      @Override
-      public int decompress(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen) {
-        return decompressor.decompress(src, srcOff, srcLen, dest, destOff, maxDestLen);
-      }
-
-      @Override
-      public int decompress(ByteBuffer src, int srcOff, int srcLen, ByteBuffer dest, int destOff, int maxDestLen) {
-        return decompressor.decompress(src, srcOff, srcLen, dest, destOff, maxDestLen);
-      }
-
-      @Override
-      int decompressWithPrefix(byte[] src, int srcOff, int srcLen, byte[] dest, int destOff, int maxDestLen,
-                               int prefixLen) {
-        final int n = decompressor.decompressWithPrefix(src, srcOff, srcLen, dest, destOff, maxDestLen, prefixLen);
-        destOffs.add(destOff);
-        destEnds.add(destOff + n);
-        return n;
-      }
-    };
-
-    // Small compressed blocks: each one may decompress to the maximum block size, so the stream needs room for 64 KB
-    // after the history for each of them. Each block references the farthest byte of the history.
+  public void historyIsMovedOncePer64KBWithStoredBlocks(LZ4SafeDecompressor decompressor) throws Exception {
+    // The small compressed block makes the buffer just large enough for the history and a 1-byte block. Moving the
+    // history whenever a block doesn't fit after it would then move it for each of the 1-byte blocks.
     final Random rnd = new Random(5);
     final FrameWriter w = new FrameWriter(FLG_VERSION | FLG_CONTENT_CHECKSUM, BD_64KB)
-        .uncompressedBlock(randomBytes(rnd, 1 << 16));
-    final int blockCount = 2000;
-    for (int i = 0; i < blockCount; i++) {
-      w.sequence(randomBytes(rnd, 300), WINDOW, 4).lastLiterals(randomBytes(rnd, 12));
+        .uncompressedBlock(randomBytes(rnd, 1))
+        .lastLiterals(randomBytes(rnd, 262));
+    for (int i = 0; i < 300_000; i++) {
+      w.uncompressedBlock(randomBytes(rnd, 1));
     }
-    assertArrayEquals(w.content.toByteArray(), decode(w.toByteArray(), recording));
+    assertHistoryMovesBounded(w, decompressor);
+  }
 
-    assertEquals(blockCount, destOffs.size());
-    int moves = 0;
-    for (int i = 1; i < destOffs.size(); i++) {
-      if (!destOffs.get(i).equals(destEnds.get(i - 1))) {
-        moves++;
+  @ParameterizedTest
+  @MethodSource("decompressors")
+  public void historyIsMovedOncePer64KBWithCompressedBlocks(LZ4SafeDecompressor decompressor) throws Exception {
+    // Compressed blocks of 258 bytes or more may decompress to the maximum block size, so the stream needs room for
+    // 64 KB after the history for each of them. Each block starts with a match at the largest offset.
+    final Random rnd = new Random(6);
+    for (int blockSize : new int[] {316, 2000, 40000}) {
+      final FrameWriter w = new FrameWriter(FLG_VERSION | FLG_CONTENT_CHECKSUM, BD_64KB)
+          .uncompressedBlock(randomBytes(rnd, 1 << 16));
+      for (int decoded = 0; decoded < (1 << 20); decoded += blockSize) {
+        w.sequence(new byte[0], WINDOW, 4).lastLiterals(randomBytes(rnd, blockSize - 4));
       }
+      assertHistoryMovesBounded(w, decompressor);
     }
-    final int decodedAfterFirstBlock = w.content.size - (1 << 16);
-    assertTrue(moves > 0 && moves <= decodedAfterFirstBlock / (1 << 16) + 1, "moves: " + moves);
+  }
+
+  @ParameterizedTest
+  @MethodSource("decompressors")
+  public void linkedBufferIsBounded(LZ4SafeDecompressor decompressor) throws Exception {
+    final Random rnd = new Random(7);
+    final FrameWriter w = new FrameWriter(FLG_VERSION, BD_4MB).uncompressedBlock(randomBytes(rnd, 1 << 16));
+    for (int i = 0; i < 300; i++) {
+      w.sequence(new byte[0], WINDOW, 4).lastLiterals(randomBytes(rnd, 20000));
+    }
+    final BufferStats stats = decodeTracking(w.toByteArray(), decompressor);
+    assertArrayEquals(w.content.toByteArray(), stats.content.toByteArray());
+    assertTrue(stats.moves > 0, "moves: " + stats.moves);
+    assertTrue(stats.maxBufferLength <= 2 * (1 << 16) + w.maxBlockSize(), "buffer: " + stats.maxBufferLength);
   }
 
   @Test
