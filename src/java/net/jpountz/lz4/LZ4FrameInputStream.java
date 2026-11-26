@@ -335,10 +335,13 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
   }
 
-  // Linked blocks: if fewer than len bytes follow blockOff in rawBuffer, moves the prefixLen bytes of history before
-  // blockOff to the start of rawBuffer. Returns the offset of the block, right after the history.
+  // Linked blocks: if fewer than len bytes follow blockOff in rawBuffer, and at least MAX_DISTANCE bytes before the
+  // history are no longer needed, moves the prefixLen bytes of history before blockOff to the start of rawBuffer.
+  // Returns the offset of the block, right after the history. Otherwise the caller grows rawBuffer, up to
+  // 2 * MAX_DISTANCE + maxBlockSize: as in liblz4, the history is then moved at most once per MAX_DISTANCE bytes of
+  // decompressed data, however small the blocks are.
   private int makeRoom(int blockOff, int prefixLen, int len) {
-    if (blockOff > prefixLen && notEnoughSpace(rawBuffer.length - blockOff, len)) {
+    if (blockOff - prefixLen >= MAX_DISTANCE && notEnoughSpace(rawBuffer.length - blockOff, len)) {
       System.arraycopy(rawBuffer, blockOff - prefixLen, rawBuffer, 0, prefixLen);
       return prefixLen;
     }
@@ -392,7 +395,8 @@ public class LZ4FrameInputStream extends FilterInputStream {
     if (!frameInfo.isEnabled(LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE)) {
       blockOff = buffer.limit();
       prefixLen = Math.min(blockOff, MAX_DISTANCE);
-      maxRawBufferSize = MAX_DISTANCE + maxBlockSize;
+      // room for the history, for up to MAX_DISTANCE bytes before it that makeRoom does not move yet, and the block
+      maxRawBufferSize = 2 * MAX_DISTANCE + maxBlockSize;
     }
 
     // The block size comes from the untrusted input, so the buffers are only allocated as the block data actually
@@ -424,7 +428,7 @@ public class LZ4FrameInputStream extends FilterInputStream {
       final int maxDecompressedSize = (int) Math.min(maxBlockSize, (long) blockSize * MAX_COMPRESSION_RATIO);
       blockOff = makeRoom(blockOff, prefixLen, maxDecompressedSize);
       if (rawBuffer == null || notEnoughSpace(rawBuffer.length - blockOff, maxDecompressedSize)) {
-        // the history, if any, is now at the start of rawBuffer
+        // the history, if any, ends at blockOff
         final int oldLength = rawBuffer == null ? 0 : rawBuffer.length;
         final byte[] grown = new byte[LZ4Utils.grownLength(oldLength, blockOff + maxDecompressedSize, maxRawBufferSize)];
         if (blockOff > 0) {
