@@ -59,18 +59,25 @@ public enum ByteArrays {
       | ((buf[i + 4] & 0xFFL) << 32) | ((buf[i + 5] & 0xFFL) << 40) | ((buf[i + 6] & 0xFFL) << 48) | ((buf[i + 7] & 0xFFL) << 56);
   }
 
-  /** Whether the 4 bytes at i equal the 4 bytes at j. */
+  /** Whether the 4 bytes at i equal the 4 bytes at j. All 8 bytes must be in bounds. */
   public static boolean readIntEquals(byte[] buf, int i, int j) {
     return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
   }
 
+  /**
+   * Copies 8 bytes from src[sOff] to dest[dOff]. Both ranges must be in bounds, and must not overlap if src and dest are
+   * the same array: the Java 7 variant copies one byte at a time, the Java 9 variant reads all 8 bytes first.
+   */
   public static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
     for (int i = 0; i < 8; ++i) {
       dest[dOff + i] = src[sOff + i];
     }
   }
 
-  /** The number of equal bytes at o1 and o2, scanning forward until o2 reaches limit. */
+  /**
+   * The number of equal bytes at o1 and o2, scanning forward until o2 reaches limit. Requires o1 &lt; o2 and
+   * limit &lt;= b.length: the Java 9 variant checks the whole range up front, not only the bytes it compares.
+   */
   public static int commonBytes(byte[] b, int o1, int o2, int limit) {
     int count = 0;
     while (o2 < limit && b[o1++] == b[o2++]) {
@@ -80,8 +87,9 @@ public enum ByteArrays {
   }
 
   /**
-   * Copies an LZ4 match: dest[dOff, matchCopyEnd) from dest[matchOff, ...), where the ranges may overlap and
-   * matchOff &lt; dOff. Writes up to 7 bytes past matchCopyEnd.
+   * Copies an LZ4 match: dest[dOff, matchCopyEnd) from dest[matchOff, ...), where the ranges may overlap. Requires
+   * matchOff &lt; dOff and matchCopyEnd - dOff &gt;= 4 (the minimum match length), and writes up to 7 bytes past
+   * matchCopyEnd, which must be in bounds. The bytes written past matchCopyEnd differ between the variants.
    */
   public static void wildIncrementalCopy(byte[] dest, int matchOff, int dOff, int matchCopyEnd) {
     do {
