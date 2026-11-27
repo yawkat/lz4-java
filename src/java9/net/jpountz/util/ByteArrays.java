@@ -24,6 +24,9 @@ import java.util.Arrays;
 /**
  * <b>FOR INTERNAL USE ONLY</b>
  * <p>
+ * Not part of the public API: it is public only because net.jpountz.lz4 uses it, and it may change or go away in any
+ * release.
+ * <p>
  * Java 9+ variant of src/java/net/jpountz/util/ByteArrays.java, loaded from META-INF/versions/9 of the multi-release
  * jar. VarHandle views and Arrays.mismatch read, write and compare several bytes per bounds check. The copies follow
  * LZ4UnsafeUtils, without Unsafe.
@@ -32,8 +35,9 @@ import java.util.Arrays;
  * Arrays.mismatch to wide accesses, and they are slower than the byte loops of the Java 7 variant. There every method
  * uses those byte loops instead.
  */
-public enum ByteArrays {
-  ;
+public final class ByteArrays {
+
+  private ByteArrays() {}
 
   private static final VarHandle SHORT_LE = MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.LITTLE_ENDIAN);
   private static final VarHandle INT_LE = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.LITTLE_ENDIAN);

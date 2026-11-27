@@ -21,12 +21,16 @@ import java.nio.ByteOrder;
 /**
  * <b>FOR INTERNAL USE ONLY</b>
  * <p>
+ * Not part of the public API: it is public only because net.jpountz.lz4 uses it, and it may change or go away in any
+ * release.
+ * <p>
  * Multi-byte reads, writes, copies and comparisons on byte arrays for the safe implementations. This is the only class
  * with a Java 9+ variant: src/java9/net/jpountz/util/ByteArrays.java, loaded from META-INF/versions/9 of the
  * multi-release jar. Keep the two in sync, and keep everything else out of them.
  */
-public enum ByteArrays {
-  ;
+public final class ByteArrays {
+
+  private ByteArrays() {}
 
   static int readShortLE(byte[] buf, int i) {
     return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8);
