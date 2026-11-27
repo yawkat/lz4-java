@@ -32,8 +32,8 @@ import java.util.Arrays;
  * LZ4UnsafeUtils, without Unsafe.
  * <p>
  * Where {@link Utils#isUnalignedAccessAllowed()} is false, HotSpot does not compile the VarHandle views and
- * Arrays.mismatch to wide accesses, and they are slower than the byte loops of the Java 7 variant. There every method
- * uses those byte loops instead.
+ * Arrays.mismatch to wide accesses, and they are slower than byte loops. There every method uses the byte loops of
+ * {@link PortableByteArrays}, as the Java 7 variant does.
  */
 public final class ByteArrays {
 
@@ -49,15 +49,14 @@ public final class ByteArrays {
 
   static int readShortLE(byte[] buf, int i) {
     if (!UNALIGNED) {
-      return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8);
+      return PortableByteArrays.readShortLE(buf, i);
     }
     return (short) SHORT_LE.get(buf, i) & 0xFFFF;
   }
 
   static void writeShortLE(byte[] buf, int off, int v) {
     if (!UNALIGNED) {
-      buf[off] = (byte) v;
-      buf[off + 1] = (byte) (v >>> 8);
+      PortableByteArrays.writeShortLE(buf, off, v);
       return;
     }
     SHORT_LE.set(buf, off, (short) v);
@@ -65,14 +64,14 @@ public final class ByteArrays {
 
   static int readIntBE(byte[] buf, int i) {
     if (!UNALIGNED) {
-      return ((buf[i] & 0xFF) << 24) | ((buf[i + 1] & 0xFF) << 16) | ((buf[i + 2] & 0xFF) << 8) | (buf[i + 3] & 0xFF);
+      return PortableByteArrays.readIntBE(buf, i);
     }
     return (int) INT_BE.get(buf, i);
   }
 
   static int readIntLE(byte[] buf, int i) {
     if (!UNALIGNED) {
-      return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8) | ((buf[i + 2] & 0xFF) << 16) | ((buf[i + 3] & 0xFF) << 24);
+      return PortableByteArrays.readIntLE(buf, i);
     }
     return (int) INT_LE.get(buf, i);
   }
@@ -80,16 +79,14 @@ public final class ByteArrays {
   /** Reads an int in native byte order. */
   static int readInt(byte[] buf, int i) {
     if (!UNALIGNED) {
-      return Utils.NATIVE_BYTE_ORDER == ByteOrder.BIG_ENDIAN ? readIntBE(buf, i) : readIntLE(buf, i);
+      return PortableByteArrays.readInt(buf, i);
     }
     return (int) INT.get(buf, i);
   }
 
   static long readLongLE(byte[] buf, int i) {
     if (!UNALIGNED) {
-      return (buf[i] & 0xFFL) | ((buf[i + 1] & 0xFFL) << 8) | ((buf[i + 2] & 0xFFL) << 16) | ((buf[i + 3] & 0xFFL) << 24)
-        | ((buf[i + 4] & 0xFFL) << 32) | ((buf[i + 5] & 0xFFL) << 40) | ((buf[i + 6] & 0xFFL) << 48)
-        | ((buf[i + 7] & 0xFFL) << 56);
+      return PortableByteArrays.readLongLE(buf, i);
     }
     return (long) LONG_LE.get(buf, i);
   }
@@ -97,7 +94,7 @@ public final class ByteArrays {
   /** Whether the 4 bytes at i equal the 4 bytes at j. All 8 bytes must be in bounds. */
   public static boolean readIntEquals(byte[] buf, int i, int j) {
     if (!UNALIGNED) {
-      return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
+      return PortableByteArrays.readIntEquals(buf, i, j);
     }
     return (int) INT.get(buf, i) == (int) INT.get(buf, j);
   }
@@ -108,9 +105,7 @@ public final class ByteArrays {
    */
   public static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
     if (!UNALIGNED) {
-      for (int i = 0; i < 8; ++i) {
-        dest[dOff + i] = src[sOff + i];
-      }
+      PortableByteArrays.copy8Bytes(src, sOff, dest, dOff);
       return;
     }
     LONG.set(dest, dOff, (long) LONG.get(src, sOff));
@@ -123,11 +118,7 @@ public final class ByteArrays {
   public static int commonBytes(byte[] b, int o1, int o2, int limit) {
     final int len = limit - o2;
     if (len < 8 || !UNALIGNED) {
-      int count = 0;
-      while (count < len && b[o1 + count] == b[o2 + count]) {
-        ++count;
-      }
-      return count;
+      return PortableByteArrays.commonBytes(b, o1, o2, limit);
     }
     // Most matches end within a few bytes, so compare one word before paying for the setup of Arrays.mismatch.
     final long diff = (long) LONG_LE.get(b, o1) ^ (long) LONG_LE.get(b, o2);
@@ -148,11 +139,7 @@ public final class ByteArrays {
     // pattern first, so that matchOff can trail dOff by a multiple of the pattern length of at least 8: 8 for distances
     // 1 and 2, 9 for 3, and twice the distance for 4 to 7.
     if (!UNALIGNED) {
-      do {
-        copy8Bytes(dest, matchOff, dest, dOff);
-        matchOff += 8;
-        dOff += 8;
-      } while (dOff < matchCopyEnd);
+      PortableByteArrays.wildIncrementalCopy(dest, matchOff, dOff, matchCopyEnd);
       return;
     }
     final int distance = dOff - matchOff;

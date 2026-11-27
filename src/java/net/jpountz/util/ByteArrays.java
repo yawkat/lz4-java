@@ -16,8 +16,6 @@ package net.jpountz.util;
  * limitations under the License.
  */
 
-import java.nio.ByteOrder;
-
 /**
  * <b>FOR INTERNAL USE ONLY</b>
  * <p>
@@ -26,46 +24,41 @@ import java.nio.ByteOrder;
  * <p>
  * Multi-byte reads, writes, copies and comparisons on byte arrays for the safe implementations. This is the only class
  * with a Java 9+ variant: src/java9/net/jpountz/util/ByteArrays.java, loaded from META-INF/versions/9 of the
- * multi-release jar. Keep the two in sync, and keep everything else out of them.
+ * multi-release jar. Keep the two in sync, and keep everything else out of them. The byte loops themselves are in
+ * {@link PortableByteArrays}, which the Java 9+ variant also uses where unaligned access is not allowed.
  */
 public final class ByteArrays {
 
   private ByteArrays() {}
 
   static int readShortLE(byte[] buf, int i) {
-    return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8);
+    return PortableByteArrays.readShortLE(buf, i);
   }
 
   static void writeShortLE(byte[] buf, int off, int v) {
-    buf[off++] = (byte) v;
-    buf[off++] = (byte) (v >>> 8);
+    PortableByteArrays.writeShortLE(buf, off, v);
   }
 
   static int readIntBE(byte[] buf, int i) {
-    return ((buf[i] & 0xFF) << 24) | ((buf[i + 1] & 0xFF) << 16) | ((buf[i + 2] & 0xFF) << 8) | (buf[i + 3] & 0xFF);
+    return PortableByteArrays.readIntBE(buf, i);
   }
 
   static int readIntLE(byte[] buf, int i) {
-    return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8) | ((buf[i + 2] & 0xFF) << 16) | ((buf[i + 3] & 0xFF) << 24);
+    return PortableByteArrays.readIntLE(buf, i);
   }
 
   /** Reads an int in native byte order. */
   static int readInt(byte[] buf, int i) {
-    if (Utils.NATIVE_BYTE_ORDER == ByteOrder.BIG_ENDIAN) {
-      return readIntBE(buf, i);
-    } else {
-      return readIntLE(buf, i);
-    }
+    return PortableByteArrays.readInt(buf, i);
   }
 
   static long readLongLE(byte[] buf, int i) {
-    return (buf[i] & 0xFFL) | ((buf[i + 1] & 0xFFL) << 8) | ((buf[i + 2] & 0xFFL) << 16) | ((buf[i + 3] & 0xFFL) << 24)
-      | ((buf[i + 4] & 0xFFL) << 32) | ((buf[i + 5] & 0xFFL) << 40) | ((buf[i + 6] & 0xFFL) << 48) | ((buf[i + 7] & 0xFFL) << 56);
+    return PortableByteArrays.readLongLE(buf, i);
   }
 
   /** Whether the 4 bytes at i equal the 4 bytes at j. All 8 bytes must be in bounds. */
   public static boolean readIntEquals(byte[] buf, int i, int j) {
-    return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
+    return PortableByteArrays.readIntEquals(buf, i, j);
   }
 
   /**
@@ -73,9 +66,7 @@ public final class ByteArrays {
    * are the same array: the Java 7 variant copies one byte at a time, the Java 9 variant may read all 8 bytes first.
    */
   public static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
-    for (int i = 0; i < 8; ++i) {
-      dest[dOff + i] = src[sOff + i];
-    }
+    PortableByteArrays.copy8Bytes(src, sOff, dest, dOff);
   }
 
   /**
@@ -83,11 +74,7 @@ public final class ByteArrays {
    * limit &lt;= b.length: the Java 9 variant checks the whole range up front, not only the bytes it compares.
    */
   public static int commonBytes(byte[] b, int o1, int o2, int limit) {
-    int count = 0;
-    while (o2 < limit && b[o1++] == b[o2++]) {
-      ++count;
-    }
-    return count;
+    return PortableByteArrays.commonBytes(b, o1, o2, limit);
   }
 
   /**
@@ -96,10 +83,6 @@ public final class ByteArrays {
    * matchCopyEnd, which must be in bounds. The bytes written past matchCopyEnd differ between the variants.
    */
   public static void wildIncrementalCopy(byte[] dest, int matchOff, int dOff, int matchCopyEnd) {
-    do {
-      copy8Bytes(dest, matchOff, dest, dOff);
-      matchOff += 8;
-      dOff += 8;
-    } while (dOff < matchCopyEnd);
+    PortableByteArrays.wildIncrementalCopy(dest, matchOff, dOff, matchCopyEnd);
   }
 }
