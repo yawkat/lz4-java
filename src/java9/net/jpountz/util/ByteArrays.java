@@ -96,24 +96,13 @@ public enum ByteArrays {
       for (int i = 0; i < 4; ++i) {
         dest[dOff + i] = dest[matchOff + i];
       }
-      int dec = 0;
-      switch (distance) {
-        case 1:
-          matchOff -= 3;
-          break;
-        case 2:
-          matchOff -= 2;
-          break;
-        case 3:
-          matchOff -= 3;
-          dec = -1;
-          break;
+      // The next 4 bytes continue the pattern from matchOff + 1 (distances 1 and 3) or matchOff + 2 (distance 2).
+      matchOff += distance == 2 ? 2 : 1;
+      INT.set(dest, dOff + 4, (int) INT.get(dest, matchOff));
+      dOff += 8;
+      if (distance == 3) {
+        ++matchOff;
       }
-      dOff += 4;
-      matchOff += 4;
-      INT.set(dest, dOff, (int) INT.get(dest, matchOff));
-      dOff += 4;
-      matchOff -= dec;
     } else if (distance < 8) {
       copy8Bytes(dest, matchOff, dest, dOff);
       dOff += distance;
