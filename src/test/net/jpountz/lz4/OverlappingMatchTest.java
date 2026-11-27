@@ -20,15 +20,13 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 
-import static net.jpountz.lz4.Instances.FAST_DECOMPRESSORS;
-import static net.jpountz.lz4.Instances.SAFE_DECOMPRESSORS;
 import static net.jpountz.lz4.LZ4Constants.MIN_MATCH;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A match whose distance is shorter than its length repeats a pattern. The decompressors copy matches in 4 and 8 byte
- * steps, which must not read bytes before they are written.
+ * steps, which must not read bytes before they are written. Every decompressor must decode each block to the expected
+ * bytes, into an exact-size destination and into a larger one.
  */
 public class OverlappingMatchTest {
   private static final int LITERALS = 12;
@@ -40,16 +38,13 @@ public class OverlappingMatchTest {
       for (int matchLen = MIN_MATCH; matchLen <= 40; matchLen++) {
         byte[] expected = expected(distance, matchLen);
         byte[] block = block(expected, distance, matchLen);
-        String what = "distance " + distance + ", match length " + matchLen + ", ";
-        for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {
-          byte[] out = new byte[expected.length];
-          assertEquals(expected.length, decompressor.decompress(block, 0, block.length, out, 0, out.length));
-          assertArrayEquals(expected, out, what + decompressor);
-        }
-        for (LZ4FastDecompressor decompressor : FAST_DECOMPRESSORS) {
-          byte[] out = new byte[expected.length];
-          assertEquals(block.length, decompressor.decompress(block, 0, out, 0, out.length));
-          assertArrayEquals(expected, out, what + decompressor);
+        String what = "distance " + distance + ", match length " + matchLen;
+        assertArrayEquals(expected, LZ4Factory.safeInstance().safeDecompressor().decompress(block, expected.length),
+            what);
+        try {
+          LZ4Test.assertAllDecode(block, expected.length);
+        } catch (AssertionError e) {
+          throw new AssertionError(what, e);
         }
       }
     }
