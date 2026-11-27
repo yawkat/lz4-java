@@ -17,6 +17,7 @@ package net.jpountz.util;
  */
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import java.io.DataInputStream;
 import java.io.File;
@@ -37,18 +38,17 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * The failsafe execution sets lz4.testJar and runs the tests against the multi-release jar. There ByteArrays must be
  * the Java 9 variant, or that run tests the Java 7 class a second time.
  */
+@EnabledIfSystemProperty(named = "lz4.testJar", matches = "true", disabledReason = "only runs against the packaged jar")
 public class MultiReleaseJarTest {
   private static final int JAVA_9_CLASS_FILE = 53;
 
   @Test
   public void jarServesJava9ByteArrays() throws Exception {
-    assumeTrue(Boolean.getBoolean("lz4.testJar"), "only runs against the packaged jar");
     assertEquals(JAVA_9_CLASS_FILE, classFileMajorVersion(ByteArrays.class));
   }
 
@@ -58,7 +58,6 @@ public class MultiReleaseJarTest {
    */
   @Test
   public void java9ByteArraysHasTheSameMembers() throws Exception {
-    assumeTrue(Boolean.getBoolean("lz4.testJar"), "only runs against the packaged jar");
     byte[] java7Class;
     // Without a runtime version, JarFile returns the base entry rather than the META-INF/versions/9 one.
     try (JarFile jarFile = new JarFile(jar());
@@ -90,7 +89,6 @@ public class MultiReleaseJarTest {
    */
   @Test
   public void manifestsHaveNoEmptyHeaders() throws Exception {
-    assumeTrue(Boolean.getBoolean("lz4.testJar"), "only runs against the packaged jar");
     try (JarFile jarFile = new JarFile(jar())) {
       for (Enumeration<JarEntry> entries = jarFile.entries(); entries.hasMoreElements(); ) {
         JarEntry entry = entries.nextElement();
