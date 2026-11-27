@@ -70,6 +70,8 @@
 
     <!-- plugin versions -->
     <bnd.maven.plugin.version>7.5.0</bnd.maven.plugin.version>
+    <!-- surefire and failsafe are released together and must stay at the same version -->
+    <surefire.version>3.6.1</surefire.version>
     <packages.version>${project.version}</packages.version>
     <ivy.version>${project.version}</ivy.version>
 
@@ -294,7 +296,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.6.1</version>
+        <version>${surefire.version}</version>
       </plugin>
       <!-- Surefire tests target/classes, where Java 9+ does not apply META-INF/versions. Rerun the tests that reach the
            safe Java implementations against the multi-release jar so the Java 9+ ByteArrays is tested too. The stream
@@ -302,7 +304,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
-        <version>3.6.1</version>
+        <version>${surefire.version}</version>
         <executions>
           <execution>
             <goals>
@@ -754,7 +756,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-surefire-plugin</artifactId>
-            <version>3.6.1</version>
+            <version>${surefire.version}</version>
             <configuration>
               <failIfNoTests>true</failIfNoTests>
               <systemPropertyVariables>
