@@ -115,7 +115,8 @@ rewrite-version-links:
 coverage:
   if [ -f ../target/site/jacoco/jacoco.csv ]; then \
     cp -r ../target/site/jacoco '{{build}}/site/{{latest_version_name}}/coverage' && \
-    python3 ../scripts/jacoco_summary.py ../target/site/jacoco/jacoco.csv --badge '{{build}}/site/{{latest_version_name}}/coverage/badge.json'; \
+    cp -r ../target/site/jacoco-java9 '{{build}}/site/{{latest_version_name}}/coverage/java9' && \
+    python3 ../scripts/jacoco_summary.py ../target/site/jacoco/jacoco.csv ../target/site/jacoco-java9/jacoco.csv --badge '{{build}}/site/{{latest_version_name}}/coverage/badge.json'; \
   fi
 
 prepare:

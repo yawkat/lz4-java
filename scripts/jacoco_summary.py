@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize line coverage from a JaCoCo CSV report.
+"""Summarize line coverage from one or more JaCoCo CSV reports.
 
 Prints a Markdown summary line, and with --badge also writes a shields.io endpoint badge JSON file.
 """
@@ -8,15 +8,16 @@ import csv
 import json
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("csv", help="JaCoCo CSV report, e.g. target/site/jacoco/jacoco.csv")
+parser.add_argument("csv", nargs="+", help="JaCoCo CSV reports, e.g. target/site/jacoco/jacoco.csv")
 parser.add_argument("--badge", help="write shields.io endpoint badge JSON to this file")
 args = parser.parse_args()
 
 missed = covered = 0
-with open(args.csv, newline="") as f:
-    for row in csv.DictReader(f):
-        missed += int(row["LINE_MISSED"])
-        covered += int(row["LINE_COVERED"])
+for path in args.csv:
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            missed += int(row["LINE_MISSED"])
+            covered += int(row["LINE_COVERED"])
 total = missed + covered
 pct = 100 * covered / total
 

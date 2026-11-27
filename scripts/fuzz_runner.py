@@ -118,6 +118,9 @@ def read_pom_executions(pom_path: Path, profile_id: str = "fuzz") -> List[FuzzEx
         if artifact_id == "maven-surefire-plugin":
             surefire_nodes.append(plugin)
             v = plugin.findtext("m:version", default="", namespaces=POM_NS)
+            m = re.fullmatch(r"\$\{(.+)\}", v)
+            if m:
+                v = root.findtext(f"m:properties/m:{m.group(1)}", default="", namespaces=POM_NS)
             if v:
                 surefire_version = v
 

@@ -29,6 +29,7 @@ jobs:
             # Disable fuzzing until https://github.com/CodeIntelligenceTesting/jazzer supports linux-riscv64
             maven-flags: >-
               -Dtest='!net/jpountz/fuzz/*'
+              -Dit.test='!net/jpountz/fuzz/*'
               -Dmaven.compiler.source=8
               -Dmaven.compiler.target=8
     steps:
@@ -57,6 +58,7 @@ jobs:
             -Darch.id=${arch_id} \
             -Dnative.cc=gcc \
             -Dsurefire.reportFormat=plain \
+            -Dfailsafe.reportFormat=plain \
             ${{ matrix.maven-flags }} \
             verify
       - name: Check native library
@@ -83,4 +85,6 @@ jobs:
             --expect-failing linux/amd64,linux/ppc64le,linux/riscv64,linux/s390x,windows/amd64 "$jar"
       - name: Summarize coverage
         if: matrix.coverage
-        run: python3 scripts/jacoco_summary.py target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
+        run: >-
+          python3 scripts/jacoco_summary.py target/site/jacoco/jacoco.csv target/site/jacoco-java9/jacoco.csv
+          >> "$GITHUB_STEP_SUMMARY"

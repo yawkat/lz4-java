@@ -41,6 +41,7 @@ jobs:
             -Darch.id=amd64 \
             -Dnative.cc=gcc \
             -Dsurefire.reportFormat=plain \
+            -Dfailsafe.reportFormat=plain \
             -Pcoverage \
             verify
       - name: Install uv

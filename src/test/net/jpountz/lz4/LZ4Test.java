@@ -375,7 +375,7 @@ public class LZ4Test extends AbstractLZ4Test {
    * Asserts that every decompressor decodes {@code block} to the same {@code decompressedLen} bytes, with an
    * exact-size destination and with a larger one.
    */
-  private static void assertAllDecode(byte[] block, int decompressedLen) {
+  static void assertAllDecode(byte[] block, int decompressedLen) {
     final byte[] expected = LZ4Factory.safeInstance().safeDecompressor().decompress(block, decompressedLen);
     assertEquals(decompressedLen, expected.length);
     for (LZ4SafeDecompressor decompressor : SAFE_DECOMPRESSORS) {

@@ -87,7 +87,9 @@ now always uses the (slower) safe Java implementation, regardless of which facto
 `LZ4Factory` and `XXHashFactory` provide the following implementations, which all produce compatible output:
 
 - `nativeInstance()`: JNI bindings to the reference C implementation.
-- `safeInstance()`: A pure Java port.
+- `safeInstance()`: A pure Java port. On Java 9 and newer, on platforms with fast unaligned memory access (x86,
+  aarch64, ppc64le), it reads, writes and compares several bytes at a time with `VarHandle` and `Arrays.mismatch`,
+  still without `sun.misc.Unsafe`.
 - `unsafeInstance()`: A Java port using `sun.misc.Unsafe`. For LZ4, this is currently an alias for the safe instance
   out of caution.
 
@@ -95,6 +97,20 @@ In most cases, just use `fastestInstance()`, which picks the native implementati
 to Java otherwise. Obtaining a factory is expensive, so store it in a static field and reuse it. See the
 [LZ4Factory javadoc](https://lz4-java.yawk.at/current/javadoc/net/jpountz/lz4/LZ4Factory) for caveats of the native
 implementation (temporary files, class loaders).
+
+### Multi-release jar
+
+The Java 9+ code of `safeInstance()` is in `META-INF/versions/9` of the jar, so tools that rewrite or analyze the jar
+must handle multi-release jars:
+
+- **Shading with relocation:** maven-shade-plugin (3.2.1 to 3.6.2) relocates the contents of `META-INF/versions/9`
+  classes, not their path. If the shaded jar keeps `Multi-Release: true`, its unrelocated
+  `META-INF/versions/9/net/jpountz/...` entry shadows a regular lz4-java on the same class path. Exclude
+  `META-INF/versions/9/net/jpountz/**` from the shaded jar; the relocated copy then uses the Java 7 code, which it
+  would do anyway.
+- **jdeps** refuses a multi-release jar on the class path without `--multi-release`, e.g. `--multi-release 9`.
+- **Tools that only read Java 8 class files**, such as ProGuard before 6.0 or ASM before 6.0, reject the Java 9 class.
+  Exclude `META-INF/versions/9/**` for them.
 
 ## Examples
 
