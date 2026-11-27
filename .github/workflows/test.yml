@@ -58,6 +58,7 @@ jobs:
             -Darch.id=${arch_id} \
             -Dnative.cc=gcc \
             -Dsurefire.reportFormat=plain \
+            -Dfailsafe.reportFormat=plain \
             ${{ matrix.maven-flags }} \
             verify
       - name: Summarize coverage
