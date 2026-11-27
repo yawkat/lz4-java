@@ -22,7 +22,7 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Method;
+import java.lang.reflect.Member;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Enumeration;
@@ -33,6 +33,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,9 +52,12 @@ public class MultiReleaseJarTest {
     assertEquals(JAVA_9_CLASS_FILE, classFileMajorVersion(ByteArrays.class));
   }
 
-  /** Code compiles against the Java 7 ByteArrays, so a method missing from the Java 9 one fails only at run time. */
+  /**
+   * Code compiles against the Java 7 ByteArrays, so a method or field missing from the Java 9 one fails only at run
+   * time. Private and synthetic members are not reachable from other classes and may differ.
+   */
   @Test
-  public void java9ByteArraysHasTheSameMethods() throws Exception {
+  public void java9ByteArraysHasTheSameMembers() throws Exception {
     assumeTrue(Boolean.getBoolean("lz4.testJar"), "only runs against the packaged jar");
     byte[] java7Class;
     // Without a runtime version, JarFile returns the base entry rather than the META-INF/versions/9 one.
@@ -70,13 +74,13 @@ public class MultiReleaseJarTest {
         return defineClass(ByteArrays.class.getName(), java7Class, 0, java7Class.length);
       }
     }
-    assertEquals(publicMethods(new Java7Loader().define()), publicMethods(ByteArrays.class));
+    assertEquals(accessibleMembers(new Java7Loader().define()), accessibleMembers(ByteArrays.class));
   }
 
-  private static Set<String> publicMethods(Class<?> c) {
-    return Arrays.stream(c.getDeclaredMethods())
-        .filter(m -> Modifier.isPublic(m.getModifiers()))
-        .map(Method::toString)
+  private static Set<String> accessibleMembers(Class<?> c) {
+    return Stream.<Member>concat(Arrays.stream(c.getDeclaredMethods()), Arrays.stream(c.getDeclaredFields()))
+        .filter(m -> !Modifier.isPrivate(m.getModifiers()) && !m.isSynthetic())
+        .map(Member::toString)
         .collect(Collectors.toCollection(TreeSet::new));
   }
 
