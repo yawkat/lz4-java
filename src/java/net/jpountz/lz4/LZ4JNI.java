@@ -37,6 +37,11 @@ enum LZ4JNI {
   static native int LZ4_compressHC(byte[] srcArray, ByteBuffer srcBuffer, int srcOff, int srcLen, byte[] destArray, ByteBuffer destBuffer, int destOff, int maxDestLen, int compressionLevel);
   static native int LZ4_decompress_fast(byte[] srcArray, ByteBuffer srcBuffer, int srcOff, byte[] destArray, ByteBuffer destBuffer, int destOff, int destLen);
   static native int LZ4_decompress_safe(byte[] srcArray, ByteBuffer srcBuffer, int srcOff, int srcLen, byte[] destArray, ByteBuffer destBuffer, int destOff, int maxDestLen);
+  /**
+   * Calls {@code LZ4_decompress_safe_usingDict()} with the {@code dictLen} bytes before {@code destOff} in the
+   * destination as the dictionary. liblz4 detects this prefix case and decompresses without copying it.
+   */
+  static native int LZ4_decompress_safe_usingDict(byte[] srcArray, ByteBuffer srcBuffer, int srcOff, int srcLen, byte[] destArray, ByteBuffer destBuffer, int destOff, int maxDestLen, int dictLen);
   static native int LZ4_compressBound(int len);
 
   /**

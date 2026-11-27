@@ -13,6 +13,15 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 }
+@if{ prefix }
+  // Same as decompress, but matches may also reference the prefixLen bytes before destOff in dest, which hold the
+  // previously decompressed data. A separate copy, so that the code generated for decompress stays the same.
+  @Override
+  int decompressWithPrefix(${storage} src, final int srcOff, final int srcLen, ${storage} dest, final int destOff, int destLen, final int prefixLen) {
+    ${utils}.checkRange(src, srcOff, srcLen);
+    ${utils}.checkRange(dest, destOff, destLen);
+    ${utils}.checkRange(dest, destOff - prefixLen, prefixLen);
+@else{}
   @Override
   public @if{ size == "Fast" }int decompress(${storage} src, final int srcOff, ${storage} dest, final int destOff, int destLen) {
     @if{ storage == "ByteBuffer"}
@@ -26,6 +35,7 @@
   private @end{}int decompress(${storage} src, final int srcOff, final int srcLen, ${storage} dest, final int destOff, int destLen) {
     ${utils}.checkRange(src, srcOff, srcLen);
     ${utils}.checkRange(dest, destOff, destLen);
+@end{}
 @if{ storage == "ByteBuffer"}
     if (src.hasArray() && dest.hasArray()) {
       return decompress(src.array(), srcOff + src.arrayOffset(), srcLen, dest.array(), destOff + dest.arrayOffset(), destLen);
@@ -51,6 +61,9 @@
 @end{}
     final int srcEnd = srcOff + srcLen;
     final int destEnd = destOff + destLen;
+@if{ prefix }
+    final int prefixStart = destOff - prefixLen;
+@end{}
 
     int sOff = srcOff;
     int dOff = destOff;
@@ -112,7 +125,7 @@
       sOff += 2;
       int matchOff = dOff - matchDec;
 
-      if (matchOff < destOff) {
+      if (matchOff < @if{ prefix }prefixStart@else{}destOff@end{}) {
         throw new LZ4Exception("Malformed input at " + sOff);
       }
 

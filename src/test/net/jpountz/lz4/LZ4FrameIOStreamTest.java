@@ -861,11 +861,13 @@ public class LZ4FrameIOStreamTest {
       }
 
       final ByteBuffer buffer = ByteBuffer.wrap(bytes);
-      // Make sure final "block" is a zero length block, then set it to an incompressible zero length block.
+      // Make sure final "block" is a zero length block, then set it to an incompressible zero length block. This is an
+      // empty block rather than an EndMark, so the frame is truncated.
       Assert.assertEquals(0, buffer.getInt(bytes.length - (Integer.SIZE >> 3)));
       buffer.putInt(bytes.length - (Integer.SIZE >> 3), LZ4FrameOutputStream.LZ4_FRAME_INCOMPRESSIBLE_MASK);
       try (final InputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(bytes))) {
         Assert.assertEquals(data, (byte) is.read());
+        Assert.assertThrows(IOException.class, is::read);
       }
     }
   }
@@ -1043,17 +1045,20 @@ public class LZ4FrameIOStreamTest {
   }
 
   @Test
-  public void testLinkedBlocksFirstHeaderThrowsIOException() throws IOException {
+  public void testLinkedBlocksFlagIsAccepted() throws IOException {
+    Assume.assumeTrue(testSize == 0); // does not depend on the test size
     final byte[] frame = compressFrame("hello".getBytes("UTF-8"), LZ4FrameOutputStream.FLG.Bits.BLOCK_INDEPENDENCE);
     // version 01, BLOCK_INDEPENDENCE cleared (linked blocks), with a valid descriptor checksum
     frame[4] = 0x40;
     frame[6] = (byte) ((XXHashFactory.fastestInstance().hash32().hash(frame, 4, 2, 0) >> 8) & 0xFF);
 
-    // the header is read lazily, so construction must not fail
-    final LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame), true);
-    assertInvalidDescriptor(Assert.assertThrows(IOException.class, is::isExpectedContentSizeDefined));
-    Assert.assertThrows(IOException.class, is::getExpectedContentSize);
-    assertFailedStream(is);
+    try (LZ4FrameInputStream is = new LZ4FrameInputStream(new ByteArrayInputStream(frame), true)) {
+      Assert.assertFalse(is.isExpectedContentSizeDefined());
+      final byte[] decoded = new byte[16];
+      Assert.assertEquals(5, is.read(decoded));
+      Assert.assertEquals("hello", new String(decoded, 0, 5, "UTF-8"));
+      Assert.assertEquals(-1, is.read());
+    }
   }
 
   @Test
@@ -1095,7 +1100,6 @@ public class LZ4FrameIOStreamTest {
   public void testInvalidOrUnsupportedFrameDescriptor() throws IOException {
     Assume.assumeTrue(testSize == 0); // does not depend on the test size
     final int[][] descriptors = {
-        {0x40, 0x70}, // dependent blocks
         {0x61, 0x70}, // dictionary ID
         {0x62, 0x70}, // reserved FLG bit
         {0x20, 0x70}, // unsupported version

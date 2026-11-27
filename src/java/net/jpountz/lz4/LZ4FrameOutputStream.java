@@ -340,6 +340,10 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
         }
       }
       validate();
+      // LZ4FrameOutputStream only writes independent blocks. LZ4FrameInputStream reads both, through fromByte.
+      if (!bitSet.get(Bits.BLOCK_INDEPENDENCE.position)) {
+        throw new RuntimeException("Dependent block stream is unsupported (BLOCK_INDEPENDENCE must be set)");
+      }
     }
 
     private FLG(int version, byte b) {
@@ -349,12 +353,13 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
     }
 
     public static FLG fromByte(byte flg) {
-      final byte versionMask = (byte) (flg & (3 << 6));
-      return new FLG(versionMask >>> 6, (byte) (flg ^ versionMask));
+      return new FLG((flg >> 6) & 3, (byte) (flg & 0x3F));
     }
 
     public byte toByte() {
-      return (byte) (bitSet.toByteArray()[0] | ((version & 3) << 6));
+      // toByteArray() is empty if no bit is set, which fromByte allows for linked blocks
+      final byte[] bits = bitSet.toByteArray();
+      return (byte) ((bits.length == 0 ? 0 : bits[0]) | ((version & 3) << 6));
     }
 
     private void validate() {
@@ -363,9 +368,6 @@ public class LZ4FrameOutputStream extends FilterOutputStream {
       }
       if (bitSet.get(Bits.RESERVED_1.position)) {
         throw new RuntimeException("Reserved1 field must be 0");
-      }
-      if (!bitSet.get(Bits.BLOCK_INDEPENDENCE.position)) {
-        throw new RuntimeException("Dependent block stream is unsupported (BLOCK_INDEPENDENCE must be set)");
       }
       if (version != DEFAULT_VERSION) {
         throw new RuntimeException(String.format(Locale.ROOT, "Version %d is unsupported", version));

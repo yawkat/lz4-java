@@ -922,6 +922,27 @@
                   <test>net.jpountz.fuzz.LZ4DecompressorTest#native_fast_bytebuffer</test>
                 </configuration>
               </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4DecompressorTest#safe_prefix</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4DecompressorTest#safe_prefix</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4DecompressorTest#unsafe_prefix</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4DecompressorTest#unsafe_prefix</test>
+                </configuration>
+              </execution>
+              <execution>
+                <id>fuzz-net.jpountz.fuzz.LZ4DecompressorTest#native_prefix</id>
+                <goals><goal>test</goal></goals>
+                <configuration>
+                  <test>net.jpountz.fuzz.LZ4DecompressorTest#native_prefix</test>
+                </configuration>
+              </execution>
 
               <!-- LZ4CompressorTest fast compressor (array) -->
               <execution>
