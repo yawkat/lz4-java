@@ -27,6 +27,10 @@ import java.util.Arrays;
  * Java 9+ variant of src/java/net/jpountz/util/ByteArrays.java, loaded from META-INF/versions/9 of the multi-release
  * jar. VarHandle views and Arrays.mismatch read, write and compare several bytes per bounds check. The copies follow
  * LZ4UnsafeUtils, without Unsafe.
+ * <p>
+ * Where {@link Utils#isUnalignedAccessAllowed()} is false, HotSpot does not compile the VarHandle views and
+ * Arrays.mismatch to wide accesses, and they are slower than the byte loops of the Java 7 variant. There every method
+ * uses those byte loops instead.
  */
 public enum ByteArrays {
   ;
@@ -37,42 +41,74 @@ public enum ByteArrays {
   private static final VarHandle INT = MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.nativeOrder());
   private static final VarHandle LONG_LE = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
   private static final VarHandle LONG = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.nativeOrder());
+  private static final boolean UNALIGNED = Utils.isUnalignedAccessAllowed();
 
   static int readShortLE(byte[] buf, int i) {
+    if (!UNALIGNED) {
+      return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8);
+    }
     return (short) SHORT_LE.get(buf, i) & 0xFFFF;
   }
 
   static void writeShortLE(byte[] buf, int off, int v) {
+    if (!UNALIGNED) {
+      buf[off] = (byte) v;
+      buf[off + 1] = (byte) (v >>> 8);
+      return;
+    }
     SHORT_LE.set(buf, off, (short) v);
   }
 
   static int readIntBE(byte[] buf, int i) {
+    if (!UNALIGNED) {
+      return ((buf[i] & 0xFF) << 24) | ((buf[i + 1] & 0xFF) << 16) | ((buf[i + 2] & 0xFF) << 8) | (buf[i + 3] & 0xFF);
+    }
     return (int) INT_BE.get(buf, i);
   }
 
   static int readIntLE(byte[] buf, int i) {
+    if (!UNALIGNED) {
+      return (buf[i] & 0xFF) | ((buf[i + 1] & 0xFF) << 8) | ((buf[i + 2] & 0xFF) << 16) | ((buf[i + 3] & 0xFF) << 24);
+    }
     return (int) INT_LE.get(buf, i);
   }
 
   /** Reads an int in native byte order. */
   static int readInt(byte[] buf, int i) {
+    if (!UNALIGNED) {
+      return Utils.NATIVE_BYTE_ORDER == ByteOrder.BIG_ENDIAN ? readIntBE(buf, i) : readIntLE(buf, i);
+    }
     return (int) INT.get(buf, i);
   }
 
   static long readLongLE(byte[] buf, int i) {
+    if (!UNALIGNED) {
+      return (buf[i] & 0xFFL) | ((buf[i + 1] & 0xFFL) << 8) | ((buf[i + 2] & 0xFFL) << 16) | ((buf[i + 3] & 0xFFL) << 24)
+        | ((buf[i + 4] & 0xFFL) << 32) | ((buf[i + 5] & 0xFFL) << 40) | ((buf[i + 6] & 0xFFL) << 48)
+        | ((buf[i + 7] & 0xFFL) << 56);
+    }
     return (long) LONG_LE.get(buf, i);
   }
 
   /** Whether the 4 bytes at i equal the 4 bytes at j. All 8 bytes must be in bounds. */
   public static boolean readIntEquals(byte[] buf, int i, int j) {
+    if (!UNALIGNED) {
+      return buf[i] == buf[j] && buf[i + 1] == buf[j + 1] && buf[i + 2] == buf[j + 2] && buf[i + 3] == buf[j + 3];
+    }
     return (int) INT.get(buf, i) == (int) INT.get(buf, j);
   }
 
   /**
-   * Copies 8 bytes from src[sOff] to dest[dOff]. Both ranges must be in bounds, and must not overlap if src and dest are
-   * the same array: the Java 7 variant copies one byte at a time, the Java 9 variant reads all 8 bytes first.
+   * Copies 8 bytes from src[sOff] to dest[dOff]. Both ranges must be in bounds, and must not overlap if src and dest
+   * are the same array: the Java 7 variant copies one byte at a time, the Java 9 variant may read all 8 bytes first.
    */
   public static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
+    if (!UNALIGNED) {
+      for (int i = 0; i < 8; ++i) {
+        dest[dOff + i] = src[sOff + i];
+      }
+      return;
+    }
     LONG.set(dest, dOff, (long) LONG.get(src, sOff));
   }
 
@@ -82,7 +118,7 @@ public enum ByteArrays {
    */
   public static int commonBytes(byte[] b, int o1, int o2, int limit) {
     final int len = limit - o2;
-    if (len < 8) {
+    if (len < 8 || !UNALIGNED) {
       int count = 0;
       while (count < len && b[o1 + count] == b[o2 + count]) {
         ++count;
@@ -107,6 +143,14 @@ public enum ByteArrays {
     // An 8-byte copy reads bytes it has not written yet while the distance is below 8. Write the start of the repeating
     // pattern first, so that matchOff can trail dOff by a multiple of the pattern length of at least 8: 8 for distances
     // 1 and 2, 9 for 3, and twice the distance for 4 to 7.
+    if (!UNALIGNED) {
+      do {
+        copy8Bytes(dest, matchOff, dest, dOff);
+        matchOff += 8;
+        dOff += 8;
+      } while (dOff < matchCopyEnd);
+      return;
+    }
     final int distance = dOff - matchOff;
     assert distance > 0 : distance;
     if (distance < 4) {

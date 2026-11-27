@@ -65,8 +65,8 @@ public enum ByteArrays {
   }
 
   /**
-   * Copies 8 bytes from src[sOff] to dest[dOff]. Both ranges must be in bounds, and must not overlap if src and dest are
-   * the same array: the Java 7 variant copies one byte at a time, the Java 9 variant reads all 8 bytes first.
+   * Copies 8 bytes from src[sOff] to dest[dOff]. Both ranges must be in bounds, and must not overlap if src and dest
+   * are the same array: the Java 7 variant copies one byte at a time, the Java 9 variant may read all 8 bytes first.
    */
   public static void copy8Bytes(byte[] src, int sOff, byte[] dest, int dOff) {
     for (int i = 0; i < 8; ++i) {
