@@ -406,10 +406,23 @@
                   <goal>report</goal>
                 </goals>
                 <configuration>
-                  <!-- A report cannot hold two classes of the same name; this skips the Java 9+ ByteArrays -->
+                  <!-- A report cannot hold two classes of the same name; report-java9 covers the Java 9+ ByteArrays -->
                   <excludes>
                     <exclude>META-INF/versions/**</exclude>
                   </excludes>
+                </configuration>
+              </execution>
+              <execution>
+                <id>report-java9</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+                <configuration>
+                  <includes>
+                    <include>META-INF/versions/9/**</include>
+                  </includes>
+                  <outputDirectory>${project.reporting.outputDirectory}/jacoco-java9</outputDirectory>
                 </configuration>
               </execution>
             </executions>

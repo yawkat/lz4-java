@@ -62,4 +62,6 @@ jobs:
             verify
       - name: Summarize coverage
         if: matrix.coverage
-        run: python3 scripts/jacoco_summary.py target/site/jacoco/jacoco.csv >> "$GITHUB_STEP_SUMMARY"
+        run: >-
+          python3 scripts/jacoco_summary.py target/site/jacoco/jacoco.csv target/site/jacoco-java9/jacoco.csv
+          >> "$GITHUB_STEP_SUMMARY"
