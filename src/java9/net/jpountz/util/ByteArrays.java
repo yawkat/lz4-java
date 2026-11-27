@@ -38,28 +38,28 @@ public enum ByteArrays {
   private static final VarHandle LONG_LE = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
   private static final VarHandle LONG = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.nativeOrder());
 
-  public static int readShortLE(byte[] buf, int i) {
+  static int readShortLE(byte[] buf, int i) {
     return (short) SHORT_LE.get(buf, i) & 0xFFFF;
   }
 
-  public static void writeShortLE(byte[] buf, int off, int v) {
+  static void writeShortLE(byte[] buf, int off, int v) {
     SHORT_LE.set(buf, off, (short) v);
   }
 
-  public static int readIntBE(byte[] buf, int i) {
+  static int readIntBE(byte[] buf, int i) {
     return (int) INT_BE.get(buf, i);
   }
 
-  public static int readIntLE(byte[] buf, int i) {
+  static int readIntLE(byte[] buf, int i) {
     return (int) INT_LE.get(buf, i);
   }
 
   /** Reads an int in native byte order. */
-  public static int readInt(byte[] buf, int i) {
+  static int readInt(byte[] buf, int i) {
     return (int) INT.get(buf, i);
   }
 
-  public static long readLongLE(byte[] buf, int i) {
+  static long readLongLE(byte[] buf, int i) {
     return (long) LONG_LE.get(buf, i);
   }
 
