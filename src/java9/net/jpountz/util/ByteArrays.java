@@ -82,11 +82,20 @@ public enum ByteArrays {
    */
   public static int commonBytes(byte[] b, int o1, int o2, int limit) {
     final int len = limit - o2;
-    if (len <= 0) {
-      return 0;
+    if (len < 8) {
+      int count = 0;
+      while (count < len && b[o1 + count] == b[o2 + count]) {
+        ++count;
+      }
+      return count;
     }
-    final int mismatch = Arrays.mismatch(b, o1, o1 + len, b, o2, limit);
-    return mismatch < 0 ? len : mismatch;
+    // Most matches end within a few bytes, so compare one word before paying for the setup of Arrays.mismatch.
+    final long diff = (long) LONG_LE.get(b, o1) ^ (long) LONG_LE.get(b, o2);
+    if (diff != 0) {
+      return Long.numberOfTrailingZeros(diff) >>> 3;
+    }
+    final int mismatch = Arrays.mismatch(b, o1 + 8, o1 + len, b, o2 + 8, limit);
+    return mismatch < 0 ? len : 8 + mismatch;
   }
 
   /**
