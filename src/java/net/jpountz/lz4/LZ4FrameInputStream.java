@@ -327,6 +327,11 @@ public class LZ4FrameInputStream extends FilterInputStream {
     }
   }
 
+  // The decompressed data, up to the end of the current block. Tests use it to see where blocks are decoded.
+  ByteBuffer decompressedBuffer() {
+    return buffer;
+  }
+
   private void setRawBuffer(byte[] rawBuffer) {
     if (rawBuffer != this.rawBuffer) {
       this.rawBuffer = rawBuffer;
