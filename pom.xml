@@ -296,8 +296,9 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.6.1</version>
       </plugin>
-      <!-- Surefire tests target/classes, where Java 9+ does not apply META-INF/versions. Rerun the tests against the
-           multi-release jar so the Java 9+ ByteArrays is tested too. -->
+      <!-- Surefire tests target/classes, where Java 9+ does not apply META-INF/versions. Rerun the tests that reach the
+           safe Java implementations against the multi-release jar so the Java 9+ ByteArrays is tested too. The stream
+           and factory tests mostly run the JNI code, which the jar does not change. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
@@ -312,7 +313,14 @@
         </executions>
         <configuration>
           <includes>
-            <include>**/*Test.java</include>
+            <include>net/jpountz/util/MultiReleaseJarTest.java</include>
+            <include>net/jpountz/lz4/LZ4Test.java</include>
+            <include>net/jpountz/lz4/OutOfBoundsTest.java</include>
+            <include>net/jpountz/lz4/OverlappingMatchTest.java</include>
+            <include>net/jpountz/lz4/UtilsTest.java</include>
+            <include>net/jpountz/xxhash/XXHash32Test.java</include>
+            <include>net/jpountz/xxhash/XXHash64Test.java</include>
+            <include>net/jpountz/fuzz/*Test.java</include>
           </includes>
           <systemPropertyVariables>
             <lz4.testJar>true</lz4.testJar>
